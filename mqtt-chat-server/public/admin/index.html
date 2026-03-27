@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Chat Admin Dashboard</title>
+    <style>
+        :root {
+            --line-primary: #000000;
+            --line-secondary: #666666;
+            --line-tertiary: #CCCCCC;
+            --line-accent: #FF4500;
+            --bg-white: #FFFFFF;
+            --success: #22C55E;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+            background: var(--bg-white);
+            color: var(--line-primary);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        header {
+            border-bottom: 2px solid var(--line-primary);
+            padding-bottom: 16px;
+            margin-bottom: 32px;
+        }
+        
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .status-bar {
+            display: flex;
+            gap: 24px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: var(--line-secondary);
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            border: 1.5px solid currentColor;
+        }
+        
+        .status-dot.online {
+            border-color: var(--success);
+            background: var(--success);
+        }
+        
+        .status-dot.offline {
+            border-color: var(--danger);
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        
+        .card {
+            border: 1px solid var(--line-tertiary);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        
+        .card-header {
+            background: var(--bg-white);
+            border-bottom: 1px solid var(--line-tertiary);
+            padding: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+        }
+        
+        .card-body {
+            padding: 16px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .btn {
+            background: transparent;
+            border: 1px solid var(--line-primary);
+            border-radius: 4px;
+            padding: 6px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        
+        .btn:hover {
+            border-color: var(--line-accent);
+            background: rgba(255, 69, 0, 0.05);
+        }
+        
+        .btn-refresh {
+            background: var(--line-accent);
+            color: white;
+            border-color: var(--line-accent);
+        }
+        
+        .btn-refresh:hover {
+            background: #e03e00;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            text-align: left;
+            padding: 12px 8px;
+            border-bottom: 1px solid var(--line-light);
+        }
+        
+        th {
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--line-secondary);
+        }
+        
+        td {
+            font-size: 14px;
+        }
+        
+        .topic-name {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        
+        .message-content {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .time {
+            font-size: 12px;
+            color: var(--line-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 500;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .badge-group {
+            background: rgba(59, 130, 246, 0.1);
+            color: #3B82F6;
+            border: 1px solid #3B82F6;
+        }
+        
+        .badge-private {
+            background: rgba(139, 92, 246, 0.1);
+            color: #8B5CF6;
+            border: 1px solid #8B5CF6;
+        }
+        
+        .badge-system {
+            background: rgba(236, 72, 153, 0.1);
+            color: #EC4899;
+            border: 1px solid #EC4899;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: var(--line-secondary);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 24px;
+            color: var(--line-secondary);
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .stat-card {
+            border: 1px solid var(--line-tertiary);
+            border-radius: 6px;
+            padding: 16px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--line-accent);
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: var(--line-secondary);
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        
+        .search-box {
+            margin-bottom: 16px;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--line-tertiary);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: var(--line-accent);
+            border-width: 2px;
+        }
+        
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📡 MQTT Chat Admin Dashboard</h1>
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="status-dot online"></span>
+                    <span>Server Online</span>
+                </div>
+                <div class="status-item">
+                    <span>Port: </span>
+                    <span id="httpPort">14050</span>
+                </div>
+                <div class="status-item">
+                    <span>MQTT: </span>
+                    <span>1883</span>
+                </div>
+            </div>
+        </header>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalTopics">0</div>
+                <div class="stat-label">Topics</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalMessages">0</div>
+                <div class="stat-label">Messages</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalUsers">0</div>
+                <div class="stat-label">Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalGroups">0</div>
+                <div class="stat-label">Groups</div>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">📋 Active Topics</span>
+                    <button class="btn btn-refresh" onclick="loadTopics()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div id="topicsList" class="loading">Loading...</div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">👥 Users</span>
+                    <button class="btn btn-refresh" onclick="loadUsers()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div id="usersList" class="loading">Loading...</div>
+                </div>
+            </div>
+            
+            <div class="card full-width">
+                <div class="card-header">
+                    <span class="card-title">💬 Recent Messages</span>
+                    <button class="btn btn-refresh" onclick="loadMessages()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="search-box">
+                        <input type="text" class="search-input" id="messageSearch" placeholder="Search messages..." oninput="filterMessages()">
+                    </div>
+                    <div id="messagesList" class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:14050';
+        let allMessages = [];
+        
+        async function fetchAPI(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                return null;
+            }
+        }
+        
+        async function loadStats() {
+            const [users, groups, allMessages] = await Promise.all([
+                fetchAPI('/api/admin/users'),
+                fetchAPI('/api/admin/groups'),
+                fetchAPI('/api/admin/messages')
+            ]);
+            
+            document.getElementById('totalUsers').textContent = Array.isArray(users) ? users.length : 0;
+            document.getElementById('totalGroups').textContent = Array.isArray(groups) ? groups.length : 0;
+            document.getElementById('totalMessages').textContent = Array.isArray(allMessages) ? allMessages.length : 0;
+            
+            // Count topics
+            const topics = new Set();
+            topics.add('chat/auth/login');
+            topics.add('chat/auth/register');
+            topics.add('chat/group/{groupId}/message');
+            topics.add('chat/private/{fromId}/{toId}');
+            topics.add('chat/system/notification');
+            document.getElementById('totalTopics').textContent = topics.size;
+        }
+        
+        async function loadTopics() {
+            const container = document.getElementById('topicsList');
+            container.innerHTML = '<div class="loading">Loading...</div>';
+            
+            const topics = [
+                { name: 'chat/auth/login', type: 'system', description: 'User login events' },
+                { name: 'chat/auth/register', type: 'system', description: 'User registration events' },
+                { name: 'chat/group/{groupId}/message', type: 'group', description: 'Group messages' },
+                { name: 'chat/private/{fromId}/{toId}', type: 'private', description: 'Private messages' },
+                { name: 'chat/system/notification', type: 'system', description: 'System notifications' }
+            ];
+            
+            if (topics.length === 0) {
+                container.innerHTML = '<div class="empty-state">No active topics</div>';
+                return;
+            }
+            
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Topic</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${topics.map(topic => `
+                            <tr>
+                                <td><span class="topic-name">${topic.name}</span></td>
+                                <td><span class="badge badge-${topic.type}">${topic.type}</span></td>
+                                <td>${topic.description}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = html;
+        }
+        
+        async function loadUsers() {
+            const container = document.getElementById('usersList');
+            container.innerHTML = '<div class="loading">Loading...</div>';
+            
+            const users = await fetchAPI('/api/admin/users');
+            
+            if (!users || !Array.isArray(users) || users.length === 0) {
+                container.innerHTML = '<div class="empty-state">No users found</div>';
+                return;
+            }
+            
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Status</th>
+                            <th>Last Login</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${users.map(user => `
+                            <tr>
+                                <td>${user.username}</td>
+                                <td>
+                                    <span class="status-dot ${user.is_online ? 'online' : 'offline'}"></span>
+                                    ${user.is_online ? 'Online' : 'Offline'}
+                                </td>
+                                <td class="time">${user.last_login ? new Date(user.last_login).toLocaleString() : 'Never'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = html;
+        }
+        
+        async function loadMessages() {
+            const container = document.getElementById('messagesList');
+            container.innerHTML = '<div class="loading">Loading...</div>';
+            
+            allMessages = [];
+            
+            // Get all groups from admin API (no auth required)
+            const groups = await fetchAPI('/api/admin/groups');
+            
+            if (!groups || !Array.isArray(groups)) {
+                container.innerHTML = '<div class="empty-state">No messages found</div>';
+                return;
+            }
+            
+            // Fetch messages from all groups (public API)
+            for (const group of groups.slice(0, 10)) {
+                // Try to fetch messages, but don't fail if auth is required
+                try {
+                    const messagesResponse = await fetch(`${API_BASE}/api/admin/messages`);
+                    if (messagesResponse.ok) {
+                        const messages = await messagesResponse.json();
+                        if (Array.isArray(messages)) {
+                            messages.forEach(msg => {
+                                if (msg.group_id === group.id) {
+                                    msg.groupName = group.name;
+                                    msg.messageType = 'group';
+                                    allMessages.push(msg);
+                                }
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Could not fetch messages for group:', group.name);
+                }
+            }
+            
+            // If no messages from admin API, use all messages directly
+            if (allMessages.length === 0) {
+                const allMsgs = await fetchAPI('/api/admin/messages');
+                if (Array.isArray(allMsgs)) {
+                    allMessages = allMsgs.map(msg => ({
+                        ...msg,
+                        messageType: msg.receiver_id ? 'private' : 'group'
+                    }));
+                }
+            }
+            
+            // Sort by time
+            allMessages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            
+            renderMessages(allMessages);
+        }
+        
+        function renderMessages(messages) {
+            const container = document.getElementById('messagesList');
+            
+            if (messages.length === 0) {
+                container.innerHTML = '<div class="empty-state">No messages found</div>';
+                return;
+            }
+            
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Type</th>
+                            <th>Group</th>
+                            <th>Sender</th>
+                            <th>Content</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${messages.slice(0, 50).map(msg => `
+                            <tr>
+                                <td class="time">${new Date(msg.created_at).toLocaleString()}</td>
+                                <td><span class="badge badge-${msg.messageType}">${msg.messageType}</span></td>
+                                <td>${msg.groupName || '-'}</td>
+                                <td>${msg.username || msg.nickname || 'Unknown'}</td>
+                                <td class="message-content">${escapeHtml(msg.content || '')}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = html;
+        }
+        
+        function filterMessages() {
+            const searchTerm = document.getElementById('messageSearch').value.toLowerCase();
+            
+            if (!searchTerm) {
+                renderMessages(allMessages);
+                return;
+            }
+            
+            const filtered = allMessages.filter(msg => 
+                (msg.content && msg.content.toLowerCase().includes(searchTerm)) ||
+                (msg.username && msg.username.toLowerCase().includes(searchTerm)) ||
+                (msg.groupName && msg.groupName.toLowerCase().includes(searchTerm))
+            );
+            
+            renderMessages(filtered);
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadStats();
+            loadTopics();
+            loadUsers();
+            loadMessages();
+            
+            // Auto refresh every 30 seconds
+            setInterval(() => {
+                loadStats();
+                loadTopics();
+                loadUsers();
+            }, 30000);
+        });
+    </script>
+</body>
+</html>

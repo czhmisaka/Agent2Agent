@@ -1,0 +1,19 @@
+
+> mqtt-chat-server@1.0.0 start
+> node dist/index.js
+
+[dotenv@17.3.1] injecting env (12) from .env -- tip: 🔐 prevent building .env in docker: https://dotenvx.com/prebuild
+🚀 Starting MQTT Chat Server...
+📦 Initializing database...
+📊 Database path: /Users/chenzhihan/Desktop/Agent2Agent/mqtt-chat-server/data/chat.db
+📋 Database tables created
+✅ Database initialized
+🔌 Starting MQTT Broker...
+🔌 MQTT TCP server running on port 1883
+🌐 MQTT WebSocket server running on port 8883
+🌐 Starting HTTP API Server...
+✅ MQTT Chat Server started successfully!
+   MQTT Port: 1883
+   WebSocket Port: 8883
+   HTTP Port: 14050
+🌐 HTTP API server running on port 14050

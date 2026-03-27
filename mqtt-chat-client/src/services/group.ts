@@ -1,0 +1,149 @@
+import { HttpService } from './http';
+import { MqttClientService } from '../mqtt/client';
+import chalk from 'chalk';
+
+export class GroupService {
+  private httpService: HttpService;
+  private mqttClient: MqttClientService;
+  private joinedGroups: Set<string> = new Set();
+  private userId: string | null = null;
+  private token: string | null = null;
+
+  constructor(httpService: HttpService, mqttClient: MqttClientService) {
+    this.httpService = httpService;
+    this.mqttClient = mqttClient;
+  }
+
+  setCredentials(userId: string, token: string): void {
+    this.userId = userId;
+    this.token = token;
+    this.httpService.setToken(token);
+  }
+
+  setToken(token: string): void {
+    this.token = token;
+    this.httpService.setToken(token);
+  }
+
+  async createGroup(name: string, token: string, userId: string): Promise<string | null> {
+    this.httpService.setToken(token);
+    const result = await this.httpService.createGroup(name);
+    
+    if (result && result.success) {
+      const groupId = result.groupId;
+      this.joinedGroups.add(groupId);
+      return groupId;
+    }
+    
+    return null;
+  }
+
+  async joinGroup(groupId: string, token: string, userId: string): Promise<boolean> {
+    this.httpService.setToken(token);
+    const result = await this.httpService.joinGroup(groupId);
+    
+    if (result && result.success) {
+      this.joinedGroups.add(groupId);
+      
+      // 通过 MQTT 通知服务器
+      await this.mqttClient.publish(`chat/group/${groupId}/join`, {
+        type: 'request',
+        timestamp: new Date().toISOString(),
+        payload: {
+          userId: userId,
+          token: token
+        },
+        meta: {}
+      });
+      
+      return true;
+    }
+    
+    return false;
+  }
+
+  async leaveGroup(groupId: string, token: string, userId: string): Promise<boolean> {
+    this.httpService.setToken(token);
+    const result = await this.httpService.leaveGroup(groupId);
+    
+    if (result && result.success) {
+      this.joinedGroups.delete(groupId);
+      
+      // 通过 MQTT 通知服务器
+      await this.mqttClient.publish(`chat/group/${groupId}/leave`, {
+        type: 'request',
+        timestamp: new Date().toISOString(),
+        payload: {
+          userId: userId,
+          token: token
+        },
+        meta: {}
+      });
+      
+      return true;
+    }
+    
+    return false;
+  }
+
+  async listGroups(): Promise<void> {
+    const groups = await this.httpService.getGroups();
+    
+    if (groups.length === 0) {
+      console.log(chalk.yellow('\n📋 You have not joined any groups yet.'));
+      console.log(chalk.gray('  Use /create <groupname> to create a new group'));
+      console.log(chalk.gray('  Or ask someone for a group ID to join\n'));
+      return;
+    }
+
+    console.log(chalk.yellow('\n📋 Your Groups:'));
+    groups.forEach((group: any, index: number) => {
+      const roleLabel = group.role === 'owner' ? chalk.red('👑 Owner') : 
+                        group.role === 'admin' ? chalk.yellow('🔧 Admin') : 
+                        chalk.gray('👤 Member');
+      console.log(`  ${index + 1}. ${chalk.cyan(group.name)} ${roleLabel}`);
+      console.log(`     ID: ${chalk.gray(group.id)}`);
+      if (group.description) {
+        console.log(`     Description: ${chalk.gray(group.description)}`);
+      }
+    });
+    console.log();
+  }
+
+  async listMembers(groupId: string): Promise<void> {
+    const members = await this.httpService.getGroupMembers(groupId);
+    
+    if (members.length === 0) {
+      console.log(chalk.yellow('\n👥 No members in this group'));
+      return;
+    }
+
+    console.log(chalk.yellow(`\n👥 Members (${members.length}):`));
+    members.forEach((member: any) => {
+      const status = member.is_online ? chalk.green('🟢') : chalk.gray('⚫');
+      const roleLabel = member.role === 'owner' ? chalk.red('👑') : 
+                        member.role === 'admin' ? chalk.yellow('🔧') : 
+                        chalk.gray('👤');
+      console.log(`  ${status} ${roleLabel} ${chalk.cyan(member.username)} ${member.nickname ? `(${member.nickname})` : ''}`);
+    });
+    console.log();
+  }
+
+  isGroupJoined(groupId: string): boolean {
+    return this.joinedGroups.has(groupId);
+  }
+
+  getJoinedGroups(): string[] {
+    return Array.from(this.joinedGroups);
+  }
+
+  private getTokenFromStorage(): string | null {
+    // 实际应该从 auth service 获取
+    return null;
+  }
+
+  private getUserIdFromStorage(): string | null {
+    // 实际应该从 auth service 获取
+    return null;
+  }
+}

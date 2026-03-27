@@ -1,0 +1,69 @@
+# ===========================================
+# MQTT Chat Server Docker Compose
+# 开发/测试环境配置
+# ===========================================
+
+version: '3.8'
+
+services:
+  # MQTT Chat Server
+  mqtt-chat-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mqtt-chat-server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"   # HTTP API
+      - "1883:1883"   # MQTT TCP
+      - "8883:8883"   # MQTT WebSocket
+    environment:
+      # 服务器配置
+      - NODE_ENV=development
+      - HTTP_PORT=3000
+      - MQTT_PORT=1883
+      - MQTT_WS_PORT=8883
+      
+      # JWT 配置
+      - JWT_SECRET=${JWT_SECRET:-mqtt-chat-super-secret-key-for-development-only-change-in-production}
+      - JWT_EXPIRES_IN=7d
+      
+      # 日志配置
+      - LOG_LEVEL=debug
+      
+      # CORS 配置（生产环境应该限制）
+      - CORS_ORIGIN=*
+      
+      # 数据库
+      - DB_PATH=/app/data/chat.db
+    volumes:
+      # 持久化数据
+      - mqtt-data:/app/data
+      # 持久化日志
+      - mqtt-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - mqtt-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+volumes:
+  mqtt-data:
+    driver: local
+  mqtt-logs:
+    driver: local
+
+networks:
+  mqtt-network:
+    driver: bridge

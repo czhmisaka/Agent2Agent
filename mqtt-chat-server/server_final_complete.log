@@ -1,0 +1,31 @@
+
+> mqtt-chat-server@1.0.0 start
+> node dist/index.js
+
+[dotenv@17.3.1] injecting env (12) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+🚀 Starting MQTT Chat Server...
+📦 Initializing database...
+📊 Database path: /Users/chenzhihan/Desktop/Agent2Agent/mqtt-chat-server/data/chat.db
+📋 Database tables created
+🔄 Running database migrations...
+  ✅ message_reactions table created
+  ✅ message_flags table created
+  ✅ message_mentions table created
+  ✅ subscriptions table created
+  ✅ custom_emojis table created
+  ✅ custom_commands table created
+  ✅ message_stats table created
+  ✅ offline_actions table created
+  ✅ Default emojis inserted
+  ✅ Default commands inserted
+✅ All migrations completed successfully
+✅ Database initialized
+🔌 Starting MQTT Broker...
+🔌 MQTT TCP server running on port 1883
+🌐 MQTT WebSocket server running on port 8883
+🌐 Starting HTTP API Server...
+✅ MQTT Chat Server started successfully!
+   MQTT Port: 1883
+   WebSocket Port: 8883
+   HTTP Port: 14050
+🌐 HTTP API server running on port 14050
