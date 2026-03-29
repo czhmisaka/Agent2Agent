@@ -7,7 +7,7 @@ import { getDatabase } from '../database/sqlite';
 import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 
-const aedes = new Aedes();
+const aedes = new (Aedes as any)();
 
 // 客户端存储（内存中）
 const connectedClients = new Map<string, { clientId: string; userId?: string; username?: string }>();
@@ -30,11 +30,11 @@ export async function startMqttBroker(): Promise<void> {
     const wsPort = config.mqtt.websocketPort;
     
     // 创建 WebSocket 服务器并处理 MQTT over WebSocket
-    const wsServer = new Server({
+    const wsServer = new (WebSocketServer as any)({
       port: wsPort
     });
-    
-    wsServer.on('connection', (ws: WebSocket) => {
+
+    wsServer.on('connection', (ws: any) => {
       aedes.handle(ws);
     });
 
