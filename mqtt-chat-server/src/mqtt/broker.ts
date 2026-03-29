@@ -233,6 +233,12 @@ export async function startMqttBroker(): Promise<void> {
     // 客户端断开事件
     aedes.on('clientDisconnect', (client: Client) => {
       console.log(`👋 Client disconnected: ${client.id}`);
+      const clientInfo = connectedClients.get(client.id);
+      if (clientInfo?.userId) {
+        const db = getDatabase();
+        db.prepare('UPDATE users SET is_online = 0 WHERE id = ?').run(clientInfo.userId);
+        console.log(`🔴 User ${clientInfo.username} (userId: ${clientInfo.userId}) is now offline`);
+      }
       connectedClients.delete(client.id);
     });
 
