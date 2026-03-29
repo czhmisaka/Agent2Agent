@@ -40,6 +40,7 @@ exports.startHttpServer = startHttpServer;
 const express_1 = __importDefault(require("express"));
 const config_1 = require("../config");
 const sqlite_1 = require("../database/sqlite");
+const broker_1 = require("../mqtt/broker");
 const uuid_1 = require("uuid");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
@@ -194,8 +195,58 @@ function authMiddleware(req, res, next) {
     }
 }
 // 健康检查
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+    const health = {
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        services: {}
+    };
+    let isHealthy = true;
+    // 数据库连接检查
+    try {
+        const db = (0, sqlite_1.getDatabase)();
+        const start = Date.now();
+        db.prepare('SELECT 1').get();
+        const latency = Date.now() - start;
+        health.services.database = {
+            status: 'healthy',
+            latency_ms: latency
+        };
+    }
+    catch (error) {
+        isHealthy = false;
+        health.services.database = {
+            status: 'unhealthy',
+            error: error.message
+        };
+    }
+    // MQTT Broker 状态检查
+    try {
+        const aedes = (0, broker_1.getAedes)();
+        const clientsCount = aedes.clients ? aedes.clients.size : 0;
+        health.services.mqtt = {
+            status: 'healthy',
+            connected_clients: clientsCount,
+            port: config_1.config.mqtt.port,
+            ws_port: config_1.config.mqtt.websocketPort
+        };
+    }
+    catch (error) {
+        isHealthy = false;
+        health.services.mqtt = {
+            status: 'unhealthy',
+            error: error.message
+        };
+    }
+    // 系统信息
+    health.uptime = process.uptime();
+    health.memory = {
+        used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+        unit: 'MB'
+    };
+    health.status = isHealthy ? 'ok' : 'degraded';
+    res.status(isHealthy ? 200 : 503).json(health);
 });
 // ============ 管理面板 API（无需认证）============
 // 获取所有消息（用于管理界面）
