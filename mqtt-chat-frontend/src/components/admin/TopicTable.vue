@@ -30,7 +30,7 @@
 <script setup lang="ts">
 export interface Topic {
   name: string
-  type: 'system' | 'group' | 'private'
+  type: string
   description: string
 }
 
