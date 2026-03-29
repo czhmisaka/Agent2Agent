@@ -3,18 +3,32 @@ import { mqttUrl } from '../config';
 
 type MessageHandler = (topic: string, message: any) => void;
 
+export interface MqttCredentials {
+  username: string;
+  password: string;
+}
+
 export class MqttClientService {
   private client: mqtt.MqttClient | null = null;
   private messageHandlers: Map<string, MessageHandler[]> = new Map();
+  private credentials: MqttCredentials | null = null;
 
-  async connect(): Promise<void> {
+  async connect(credentials?: MqttCredentials): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.client = mqtt.connect(mqttUrl, {
+      this.credentials = credentials || null;
+      const options: mqtt.IClientOptions = {
         clientId: `mqtt-chat-client-${Date.now()}`,
         clean: true,
         connectTimeout: 5000,
         reconnectPeriod: 1000
-      });
+      };
+
+      if (credentials) {
+        options.username = credentials.username;
+        options.password = credentials.password;
+      }
+
+      this.client = mqtt.connect(mqttUrl, options);
 
       this.client.on('connect', () => {
         console.log('MQTT client connected');
@@ -115,6 +129,24 @@ export class MqttClientService {
       this.client.end();
       this.client = null;
       console.log('MQTT client disconnected');
+    }
+  }
+
+  async reconnectWithCredentials(credentials: MqttCredentials): Promise<void> {
+    // 保存当前订阅的主题和处理器
+    const savedHandlers = new Map(this.messageHandlers);
+
+    // 断开现有连接
+    this.disconnect();
+
+    // 重新连接 with credentials
+    await this.connect(credentials);
+
+    // 重新订阅之前的主题
+    for (const [topic, handlers] of savedHandlers) {
+      for (const handler of handlers) {
+        this.subscribe(topic, handler);
+      }
     }
   }
 

@@ -245,10 +245,10 @@ class ChatClient {
 
     const token = this.authService.getToken();
     const userId = this.authService.getUserId();
-    
+
     if (token && userId) {
       this.messageService.setCredentials(userId, token);
-      await this.messageService.sendMessage(this.currentGroupId, content, token, userId);
+      await this.messageService.sendMessage(this.currentGroupId, content, userId);
     }
   }
 
@@ -261,7 +261,23 @@ class ChatClient {
           console.log(renderer.renderError('Usage: /login <username> <password>'));
           return;
         }
-        await this.authService.login(args[0], args[1]);
+        const loginSuccess = await this.authService.login(args[0], args[1]);
+        if (loginSuccess) {
+          // 使用 JWT token 作为密码重新连接 MQTT（认证在连接时完成，而非 payload）
+          const token = this.authService.getToken();
+          const username = this.authService.getUsername();
+          if (token && username) {
+            try {
+              await this.mqttClient.reconnectWithCredentials({
+                username,
+                password: token
+              });
+              console.log(chalk.green('✅ MQTT reconnected with authentication'));
+            } catch (error) {
+              console.error(chalk.red('⚠️ MQTT reconnection failed, will continue without auth:'), error);
+            }
+          }
+        }
         break;
 
       case 'register':
@@ -357,7 +373,7 @@ class ChatClient {
         const sendUserId = this.authService.getUserId();
         if (sendToken && sendUserId) {
           this.messageService.setCredentials(sendUserId, sendToken);
-          await this.messageService.sendMessage(sendGroupId, sendContent, sendToken, sendUserId);
+          await this.messageService.sendMessage(sendGroupId, sendContent, sendUserId);
         }
         break;
 
@@ -496,17 +512,11 @@ class ChatClient {
       return;
     }
 
-    const token = this.authService.getToken();
-    if (!token) return;
-
     const message = {
       type: 'action',
       action,
       timestamp: new Date().toISOString(),
-      payload: {
-        ...payload,
-        token
-      },
+      payload,
       meta: {
         groupId: this.currentGroupId,
         correlationId: this.generateMessageId()

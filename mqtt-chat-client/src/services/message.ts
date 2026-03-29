@@ -25,15 +25,14 @@ export class MessageService {
     this.httpService.setToken(token);
   }
 
-  async sendMessage(groupId: string, content: string, token: string, userId: string): Promise<boolean> {
+  async sendMessage(groupId: string, content: string, userId: string): Promise<boolean> {
     try {
-      // 通过 MQTT 发送消息
+      // 通过 MQTT 发送消息（认证已在连接时完成，不再传递 token）
       await this.mqttClient.publish(`chat/group/${groupId}/message`, {
         type: 'message',
         timestamp: new Date().toISOString(),
         payload: {
           userId: userId,
-          token: token,
           content
         },
         meta: {
@@ -50,15 +49,14 @@ export class MessageService {
     }
   }
 
-  async sendPrivateMessage(receiverId: string, content: string, token: string, senderId: string): Promise<boolean> {
+  async sendPrivateMessage(receiverId: string, content: string, senderId: string): Promise<boolean> {
     try {
-      // 通过 MQTT 发送私聊消息
+      // 通过 MQTT 发送私聊消息（认证已在连接时完成，不再传递 token）
       await this.mqttClient.publish(`chat/user/${receiverId}/private`, {
         type: 'message',
         timestamp: new Date().toISOString(),
         payload: {
           senderId: senderId,
-          token: token,
           content
         },
         meta: {
