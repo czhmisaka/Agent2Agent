@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { logger, httpLogger, AppError, ErrorCodes } from '../utils';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -37,6 +38,7 @@ app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '10kb' })); // 限制请求体大小
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(cookieParser()); // 解析 cookies
 
 // HTTP 请求日志
 app.use(httpLogger);
@@ -180,15 +182,22 @@ function sanitizeMessage(content: string): string {
     .substring(0, 5000); // 限制最大长度
 }
 
-// 中间件：验证 JWT token
+// 中间件：验证 JWT token（支持 cookie 和 Authorization header）
 function authMiddleware(req: Request, res: Response, next: any) {
-  const authHeader = req.headers.authorization;
+  // 优先从 cookie 获取 token
+  let token = req.cookies?.auth_token;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'No token provided' });
+  // 备选：从 Authorization header 获取
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
   }
 
-  const token = authHeader.substring(7);
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
 
   try {
     const decoded = jwt.verify(token, config.jwt.secret) as any;
@@ -203,15 +212,22 @@ function authMiddleware(req: Request, res: Response, next: any) {
   }
 }
 
-// 中间件：验证管理员权限
+// 中间件：验证管理员权限（支持 cookie 和 Authorization header）
 function adminAuthMiddleware(req: Request, res: Response, next: any) {
-  const authHeader = req.headers.authorization;
+  // 优先从 cookie 获取 token
+  let token = req.cookies?.auth_token;
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'No token provided', code: 'NO_TOKEN' });
+  // 备选：从 Authorization header 获取
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
   }
 
-  const token = authHeader.substring(7);
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided', code: 'NO_TOKEN' });
+  }
 
   try {
     const decoded = jwt.verify(token, config.jwt.secret) as any;
@@ -417,14 +433,21 @@ app.post('/api/users/register', async (req, res) => {
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'] }
     );
-    
+
+    // 设置 httpOnly cookie 防止 XSS 攻击
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 天
+    });
+
     res.json({
       success: true,
       userId,
-      username,
-      token
+      username
     });
-    
+
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
@@ -460,15 +483,22 @@ app.post('/api/users/login', async (req, res) => {
       config.jwt.secret,
       { expiresIn: config.jwt.expiresIn as jwt.SignOptions['expiresIn'] }
     );
-    
+
+    // 设置 httpOnly cookie 防止 XSS 攻击
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 天
+    });
+
     res.json({
       success: true,
       userId: user.id,
       username: user.username,
-      nickname: user.nickname,
-      token
+      nickname: user.nickname
     });
-    
+
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });

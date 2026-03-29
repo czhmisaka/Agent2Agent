@@ -20,6 +20,7 @@
     "aedes": "^0.51.3",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^11.7.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^4.21.2",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",
     "@types/better-sqlite3": "^7.6.12",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",

@@ -348,51 +348,61 @@
     <script>
         const API_BASE = 'http://localhost:14050';
         let currentUser = null;
-        let token = null;
         let currentGroupId = null;
         let currentGroupName = null;
         let mqttClient = null;
         let groups = [];
-        
+
+        // 从 cookie 中读取 auth_token
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
         // 初始化
         document.addEventListener('DOMContentLoaded', () => {
             checkAuth();
         });
-        
-        // 检查认证状态
+
+        // 检查认证状态（从 cookie 读取）
         function checkAuth() {
-            const savedToken = localStorage.getItem('mqtt_token');
-            const savedUser = localStorage.getItem('mqtt_user');
-            
-            if (savedToken && savedUser) {
-                token = savedToken;
-                currentUser = JSON.parse(savedUser);
-                showChatInterface();
-                loadGroups();
+            const savedUser = getCookie('mqtt_user');
+
+            if (savedUser) {
+                try {
+                    currentUser = JSON.parse(decodeURIComponent(savedUser));
+                    showChatInterface();
+                    loadGroups();
+                } catch (e) {
+                    // cookie 解析失败，清除无效 cookie
+                    document.cookie = 'mqtt_user=; Max-Age=0';
+                }
             }
         }
-        
-        // 登录
+
+        // 登录（token 现在通过 httpOnly cookie 自动存储）
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/users/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include', // 发送 cookies
                     body: JSON.stringify({ username, password })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (response.ok && data.success) {
-                    token = data.token;
                     currentUser = { userId: data.userId, username: data.username };
-                    localStorage.setItem('mqtt_token', token);
-                    localStorage.setItem('mqtt_user', JSON.stringify(currentUser));
+                    // 将用户信息存储在 cookie 中（不存储 token）
+                    document.cookie = `mqtt_user=${encodeURIComponent(JSON.stringify(currentUser))}; max-age=${7*24*60*60}; samesite=lax`;
                     showChatInterface();
                     loadGroups();
                 } else {
@@ -402,26 +412,27 @@
                 alert('Login error: ' + error.message);
             }
         });
-        
+
         // 注册
         async function register() {
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-            
+
             if (!username || !password) {
                 alert('Please enter username and password');
                 return;
             }
-            
+
             try {
                 const response = await fetch(`${API_BASE}/api/users/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include', // 发送 cookies
                     body: JSON.stringify({ username, password })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (response.ok && data.success) {
                     alert('Registration successful! Please login.');
                 } else {
@@ -431,7 +442,7 @@
                 alert('Registration error: ' + error.message);
             }
         }
-        
+
         // 显示聊天界面
         function showChatInterface() {
             document.getElementById('loginContainer').style.display = 'none';
@@ -444,7 +455,7 @@
         async function loadGroups() {
             try {
                 const response = await fetch(`${API_BASE}/api/groups`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    credentials: 'include' // 自动发送 httpOnly cookie
                 });
                 
                 groups = await response.json();
@@ -478,10 +489,8 @@
             try {
                 const response = await fetch(`${API_BASE}/api/groups`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({
                         name: 'General Chat',
                         description: 'Welcome to the general chat room!'
@@ -519,7 +528,7 @@
         async function loadMessages(groupId) {
             try {
                 const response = await fetch(`${API_BASE}/api/groups/${groupId}/messages`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+                    credentials: 'include'
                 });
                 
                 const messages = await response.json();
@@ -654,10 +663,8 @@
             try {
                 await fetch(`${API_BASE}/api/groups/${currentGroupId}/messages`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify(messageData)
                 });
             } catch (error) {
@@ -674,15 +681,16 @@
             }
         }
         
-        // 登出
+        // 登出（清除 httpOnly cookie）
         function logout() {
             if (mqttClient) {
                 mqttClient.end();
             }
-            
-            localStorage.removeItem('mqtt_token');
-            localStorage.removeItem('mqtt_user');
-            
+
+            // 清除 auth_token cookie（服务器设置的是 httpOnly，但客户端可以通过设置 Max-Age=0 来删除同名 cookie）
+            document.cookie = 'auth_token=; Max-Age=0';
+            document.cookie = 'mqtt_user=; Max-Age=0';
+
             location.reload();
         }
         

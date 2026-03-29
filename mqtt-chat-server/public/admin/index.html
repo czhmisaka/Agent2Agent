@@ -472,14 +472,19 @@
     <script>
         const API_BASE = 'http://localhost:14050';
         let allMessages = [];
-        let adminToken = localStorage.getItem('adminToken');
-        let adminUsername = localStorage.getItem('adminUsername');
+        let adminUsername = null;
 
-        function getAuthHeaders() {
-            if (!adminToken) return {};
-            return {
-                'Authorization': `Bearer ${adminToken}`
-            };
+        // 从 cookie 中读取 auth_token
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        // 检查是否已认证（通过 cookie）
+        function isAuthenticated() {
+            return !!getCookie('auth_token');
         }
 
         function updateAuthUI() {
@@ -487,7 +492,7 @@
             const userInfo = document.getElementById('userInfo');
             const adminUsernameEl = document.getElementById('adminUsername');
 
-            if (adminToken) {
+            if (isAuthenticated()) {
                 loginOverlay.classList.add('hidden');
                 userInfo.classList.remove('hidden');
                 adminUsernameEl.textContent = adminUsername || 'Admin';
@@ -511,6 +516,7 @@
                 const response = await fetch(`${API_BASE}/api/users/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include', // 发送 httpOnly cookie
                     body: JSON.stringify({ username, password })
                 });
 
@@ -521,11 +527,8 @@
                     return;
                 }
 
-                // Store token
-                adminToken = data.token;
+                // 存储用户名（token 现在通过 httpOnly cookie 自动管理）
                 adminUsername = data.username;
-                localStorage.setItem('adminToken', adminToken);
-                localStorage.setItem('adminUsername', adminUsername);
 
                 errorEl.textContent = '';
                 updateAuthUI();
@@ -540,10 +543,9 @@
         }
 
         function logout() {
-            adminToken = null;
             adminUsername = null;
-            localStorage.removeItem('adminToken');
-            localStorage.removeItem('adminUsername');
+            // 清除 auth_token cookie
+            document.cookie = 'auth_token=; Max-Age=0';
             updateAuthUI();
         }
 
@@ -552,9 +554,9 @@
                 const response = await fetch(`${API_BASE}${endpoint}`, {
                     headers: {
                         'Content-Type': 'application/json',
-                        ...getAuthHeaders(),
                         ...options.headers
                     },
+                    credentials: 'include', // 自动发送 httpOnly cookie
                     ...options
                 });
 
@@ -786,7 +788,7 @@
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {
             updateAuthUI();
-            if (adminToken) {
+            if (isAuthenticated()) {
                 loadStats();
                 loadTopics();
                 loadUsers();
@@ -795,7 +797,7 @@
 
             // Auto refresh every 30 seconds
             setInterval(() => {
-                if (adminToken) {
+                if (isAuthenticated()) {
                     loadStats();
                     loadTopics();
                     loadUsers();
