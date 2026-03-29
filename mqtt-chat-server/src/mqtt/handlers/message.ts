@@ -149,11 +149,12 @@ function handleGroupMessage(client: Client, topic: string, message: MessagePaylo
   const groupId = parts[2];
   
   if (action === 'message') {
-    const { userId, token, content } = message.payload;
-    
+    const { userId: payloadUserId, token, content } = message.payload;
+
     try {
       const decoded = jwt.verify(token, config.jwt.secret) as any;
-      
+      const userId = decoded.userId;
+
       const membership = db.prepare(
         'SELECT * FROM group_members WHERE group_id = ? AND user_id = ?'
       ).get(groupId, userId);
