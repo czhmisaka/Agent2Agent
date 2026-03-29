@@ -216,7 +216,6 @@ export const useChatStore = defineStore('chat', () => {
       timestamp: new Date().toISOString(),
       payload: {
         messageId,
-        token: authStore.token,
         emoji
       },
       meta: {
