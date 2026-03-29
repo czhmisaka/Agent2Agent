@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
 import { getDatabase } from '../database/sqlite';
+import { getAedes } from '../mqtt/broker';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -196,8 +197,64 @@ function authMiddleware(req: Request, res: Response, next: any) {
 }
 
 // 健康检查
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  const health: any = {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    services: {}
+  };
+
+  let isHealthy = true;
+
+  // 数据库连接检查
+  try {
+    const db = getDatabase();
+    const start = Date.now();
+    db.prepare('SELECT 1').get();
+    const latency = Date.now() - start;
+
+    health.services.database = {
+      status: 'healthy',
+      latency_ms: latency
+    };
+  } catch (error: any) {
+    isHealthy = false;
+    health.services.database = {
+      status: 'unhealthy',
+      error: error.message
+    };
+  }
+
+  // MQTT Broker 状态检查
+  try {
+    const aedes = getAedes() as any;
+    const clientsCount = aedes.clients ? aedes.clients.size : 0;
+
+    health.services.mqtt = {
+      status: 'healthy',
+      connected_clients: clientsCount,
+      port: config.mqtt.port,
+      ws_port: config.mqtt.websocketPort
+    };
+  } catch (error: any) {
+    isHealthy = false;
+    health.services.mqtt = {
+      status: 'unhealthy',
+      error: error.message
+    };
+  }
+
+  // 系统信息
+  health.uptime = process.uptime();
+  health.memory = {
+    used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+    total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024),
+    unit: 'MB'
+  };
+
+  health.status = isHealthy ? 'ok' : 'degraded';
+
+  res.status(isHealthy ? 200 : 503).json(health);
 });
 
 // ============ 管理面板 API（无需认证）============
