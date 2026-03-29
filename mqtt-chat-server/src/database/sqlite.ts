@@ -169,6 +169,16 @@ function alterMessagesTable(): void {
       console.log('  ~ is_pinned column already exists or error:', err.message);
     }
   }
+
+  // 添加 is_admin 字段到 users 表
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0`);
+    console.log('  + is_admin column added to users');
+  } catch (err: any) {
+    if (!err.message.includes('duplicate column')) {
+      console.log('  ~ is_admin column already exists or error:', err.message);
+    }
+  }
 }
 
 function runMigrations(): void {

@@ -265,7 +265,100 @@
             border-color: var(--line-accent);
             border-width: 2px;
         }
-        
+
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .login-box {
+            border: 2px solid var(--line-primary);
+            border-radius: 8px;
+            padding: 32px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-box h2 {
+            margin-bottom: 24px;
+            font-size: 24px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--line-tertiary);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--line-accent);
+            border-width: 2px;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--line-accent);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .login-btn:hover {
+            background: #e03e00;
+        }
+
+        .login-error {
+            color: var(--danger);
+            font-size: 14px;
+            margin-top: 12px;
+            text-align: center;
+        }
+
+        .logout-btn {
+            background: transparent;
+            border: 1px solid var(--line-secondary);
+            color: var(--line-secondary);
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .logout-btn:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
         @media (max-width: 768px) {
             .grid {
                 grid-template-columns: 1fr;
@@ -277,21 +370,46 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <!-- Login Overlay -->
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-box">
+            <h2>Admin Login</h2>
+            <div class="form-group">
+                <label for="loginUsername">Username</label>
+                <input type="text" id="loginUsername" placeholder="Enter username">
+            </div>
+            <div class="form-group">
+                <label for="loginPassword">Password</label>
+                <input type="password" id="loginPassword" placeholder="Enter password">
+            </div>
+            <button class="login-btn" onclick="login()">Login</button>
+            <div id="loginError" class="login-error"></div>
+        </div>
+    </div>
+
+    <div class="container" id="mainContent">
         <header>
-            <h1>📡 MQTT Chat Admin Dashboard</h1>
-            <div class="status-bar">
-                <div class="status-item">
-                    <span class="status-dot online"></span>
-                    <span>Server Online</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1>📡 MQTT Chat Admin Dashboard</h1>
+                    <div class="status-bar">
+                        <div class="status-item">
+                            <span class="status-dot online"></span>
+                            <span>Server Online</span>
+                        </div>
+                        <div class="status-item">
+                            <span>Port: </span>
+                            <span id="httpPort">14050</span>
+                        </div>
+                        <div class="status-item">
+                            <span>MQTT: </span>
+                            <span>1883</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="status-item">
-                    <span>Port: </span>
-                    <span id="httpPort">14050</span>
-                </div>
-                <div class="status-item">
-                    <span>MQTT: </span>
-                    <span>1883</span>
+                <div id="userInfo" class="hidden">
+                    <span id="adminUsername" style="margin-right: 12px; font-size: 14px;"></span>
+                    <button class="logout-btn" onclick="logout()">Logout</button>
                 </div>
             </div>
         </header>
@@ -354,23 +472,105 @@
     <script>
         const API_BASE = 'http://localhost:14050';
         let allMessages = [];
-        
+        let adminToken = localStorage.getItem('adminToken');
+        let adminUsername = localStorage.getItem('adminUsername');
+
+        function getAuthHeaders() {
+            if (!adminToken) return {};
+            return {
+                'Authorization': `Bearer ${adminToken}`
+            };
+        }
+
+        function updateAuthUI() {
+            const loginOverlay = document.getElementById('loginOverlay');
+            const userInfo = document.getElementById('userInfo');
+            const adminUsernameEl = document.getElementById('adminUsername');
+
+            if (adminToken) {
+                loginOverlay.classList.add('hidden');
+                userInfo.classList.remove('hidden');
+                adminUsernameEl.textContent = adminUsername || 'Admin';
+            } else {
+                loginOverlay.classList.remove('hidden');
+                userInfo.classList.add('hidden');
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorEl = document.getElementById('loginError');
+
+            if (!username || !password) {
+                errorEl.textContent = 'Please enter username and password';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/users/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    errorEl.textContent = data.error || 'Login failed';
+                    return;
+                }
+
+                // Store token
+                adminToken = data.token;
+                adminUsername = data.username;
+                localStorage.setItem('adminToken', adminToken);
+                localStorage.setItem('adminUsername', adminUsername);
+
+                errorEl.textContent = '';
+                updateAuthUI();
+                loadStats();
+                loadTopics();
+                loadUsers();
+                loadMessages();
+            } catch (error) {
+                errorEl.textContent = 'Connection error';
+                console.error('Login error:', error);
+            }
+        }
+
+        function logout() {
+            adminToken = null;
+            adminUsername = null;
+            localStorage.removeItem('adminToken');
+            localStorage.removeItem('adminUsername');
+            updateAuthUI();
+        }
+
         async function fetchAPI(endpoint, options = {}) {
             try {
                 const response = await fetch(`${API_BASE}${endpoint}`, {
                     headers: {
                         'Content-Type': 'application/json',
+                        ...getAuthHeaders(),
                         ...options.headers
                     },
                     ...options
                 });
+
+                // Handle 401/403 - token invalid or not admin
+                if (response.status === 401 || response.status === 403) {
+                    logout();
+                    return null;
+                }
+
                 return await response.json();
             } catch (error) {
                 console.error('API Error:', error);
                 return null;
             }
         }
-        
+
         async function loadStats() {
             const [users, groups, allMessages] = await Promise.all([
                 fetchAPI('/api/admin/users'),
@@ -585,17 +785,29 @@
         
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {
-            loadStats();
-            loadTopics();
-            loadUsers();
-            loadMessages();
-            
-            // Auto refresh every 30 seconds
-            setInterval(() => {
+            updateAuthUI();
+            if (adminToken) {
                 loadStats();
                 loadTopics();
                 loadUsers();
+                loadMessages();
+            }
+
+            // Auto refresh every 30 seconds
+            setInterval(() => {
+                if (adminToken) {
+                    loadStats();
+                    loadTopics();
+                    loadUsers();
+                }
             }, 30000);
+        });
+
+        // Handle Enter key on login form
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('loginPassword').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') login();
+            });
         });
     </script>
 </body>

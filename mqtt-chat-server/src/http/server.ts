@@ -183,13 +183,13 @@ function sanitizeMessage(content: string): string {
 // 中间件：验证 JWT token
 function authMiddleware(req: Request, res: Response, next: any) {
   const authHeader = req.headers.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'No token provided' });
   }
-  
+
   const token = authHeader.substring(7);
-  
+
   try {
     const decoded = jwt.verify(token, config.jwt.secret) as any;
     // 确保 userId 是字符串类型
@@ -200,6 +200,42 @@ function authMiddleware(req: Request, res: Response, next: any) {
     next();
   } catch (error) {
     return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+// 中间件：验证管理员权限
+function adminAuthMiddleware(req: Request, res: Response, next: any) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided', code: 'NO_TOKEN' });
+  }
+
+  const token = authHeader.substring(7);
+
+  try {
+    const decoded = jwt.verify(token, config.jwt.secret) as any;
+    const userId = String(decoded.userId);
+
+    // 查询用户的管理员状态
+    const db = getDatabase();
+    const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(userId) as any;
+
+    if (!user) {
+      return res.status(401).json({ error: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+
+    if (!user.is_admin) {
+      return res.status(403).json({ error: 'Admin access required', code: 'ADMIN_REQUIRED' });
+    }
+
+    (req as any).user = {
+      ...decoded,
+      userId
+    };
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token', code: 'INVALID_TOKEN' });
   }
 }
 
@@ -264,10 +300,10 @@ app.get('/health', async (req, res) => {
   res.status(isHealthy ? 200 : 503).json(health);
 });
 
-// ============ 管理面板 API（无需认证）============
+// ============ 管理面板 API（需要管理员权限）============
 
 // 获取所有消息（用于管理界面）
-app.get('/api/admin/messages', (req, res) => {
+app.get('/api/admin/messages', adminAuthMiddleware, (req, res) => {
   const db = getDatabase();
   const limit = parseInt(req.query.limit as string) || 100;
   const offset = parseInt(req.query.offset as string) || 0;
@@ -293,8 +329,8 @@ app.get('/api/admin/messages', (req, res) => {
   }
 });
 
-// 获取所有群组（无需认证）
-app.get('/api/admin/groups', (req, res) => {
+// 获取所有群组（需要管理员权限）
+app.get('/api/admin/groups', adminAuthMiddleware, (req, res) => {
   const db = getDatabase();
   
   try {
@@ -317,8 +353,8 @@ app.get('/api/admin/groups', (req, res) => {
   }
 });
 
-// 获取所有用户（无需认证 - 用于管理面板）
-app.get('/api/admin/users', (req, res) => {
+// 获取所有用户（需要管理员权限）
+app.get('/api/admin/users', adminAuthMiddleware, (req, res) => {
   const db = getDatabase();
   
   try {
@@ -436,6 +472,63 @@ app.post('/api/users/login', async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// ============ 管理员相关 API ============
+
+// 设置管理员（需要 ADMIN_SETUP_SECRET，用于初始设置）
+app.post('/api/admin/setup', async (req, res) => {
+  const db = getDatabase();
+  const { username, setup_secret } = req.body;
+
+  const expectedSecret = process.env.ADMIN_SETUP_SECRET;
+  if (!expectedSecret || setup_secret !== expectedSecret) {
+    return res.status(403).json({ error: 'Invalid setup secret', code: 'INVALID_SETUP_SECRET' });
+  }
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required' });
+  }
+
+  try {
+    const user = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as any;
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+
+    db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(user.id);
+
+    res.json({ success: true, message: `${username} is now an admin` });
+  } catch (error) {
+    console.error('Admin setup error:', error);
+    res.status(500).json({ error: 'Failed to set admin' });
+  }
+});
+
+// 提升用户为管理员（需要管理员权限）
+app.post('/api/admin/users/:userId/promote', adminAuthMiddleware, (req, res) => {
+  const db = getDatabase();
+  const { userId } = req.params;
+
+  try {
+    const user = db.prepare('SELECT id, is_admin FROM users WHERE id = ?').get(userId) as any;
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found', code: 'USER_NOT_FOUND' });
+    }
+
+    if (user.is_admin) {
+      return res.status(400).json({ error: 'User is already an admin', code: 'ALREADY_ADMIN' });
+    }
+
+    db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(userId);
+
+    res.json({ success: true, message: 'User promoted to admin' });
+  } catch (error) {
+    console.error('Promote admin error:', error);
+    res.status(500).json({ error: 'Failed to promote user' });
   }
 });
 
