@@ -170,13 +170,13 @@ function validateGroupName(name: string): ValidationResult {
  */
 function sanitizeMessage(content: string): string {
   if (!content) return '';
-  
+
   return content
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
     .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;')
     .substring(0, 5000); // 限制最大长度
 }
 
