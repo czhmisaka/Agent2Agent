@@ -21,11 +21,18 @@ const app = express();
 
 // 安全中间件
 app.use(helmet()); // 安全头部
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+// CORS 配置：生产环境禁止使用 '*'
+const corsOptions: cors.CorsOptions = {
+  origin: config.cors.allowedOrigins.length > 0
+    ? config.cors.allowedOrigins
+    : (process.env.NODE_ENV === 'production'
+      ? [] // 生产环境无配置时拒绝所有跨域请求
+      : ['http://localhost:3000', 'http://localhost:8080']), // 开发环境默认允许本地
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+};
+app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '10kb' })); // 限制请求体大小
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));

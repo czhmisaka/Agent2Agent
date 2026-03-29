@@ -23,6 +23,15 @@ const getJwtSecret = (): string => {
   throw new Error('JWT_SECRET environment variable is required in production');
 };
 
+// CORS 允许的域名列表
+const getCorsAllowedOrigins = (): string[] => {
+  const envOrigins = process.env.CORS_ALLOWED_ORIGINS;
+  if (envOrigins) {
+    return envOrigins.split(',').map(origin => origin.trim()).filter(origin => origin.length > 0);
+  }
+  return []; // 生产环境应通过环境变量配置
+};
+
 export const config = {
   mqtt: {
     port: parseInt(process.env.MQTT_PORT || '1883'),
@@ -37,5 +46,8 @@ export const config = {
   jwt: {
     secret: getJwtSecret(),
     expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+  },
+  cors: {
+    allowedOrigins: getCorsAllowedOrigins()
   }
 };
