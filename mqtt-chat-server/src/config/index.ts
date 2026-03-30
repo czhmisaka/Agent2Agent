@@ -1,24 +1,65 @@
 import * as crypto from 'crypto';
 
+// 生成随机密钥
+export const generateSecretKey = (length: number = 32): string => {
+  return crypto.randomBytes(length).toString('hex');
+};
+
+// 检查 JWT_SECRET 是否为不安全的默认值
+const validateJwtSecret = (secret: string): void => {
+  const isPlaceholder = secret.includes('your-super-secret') || secret.includes('<YOUR_JWT_SECRET_HERE>');
+  const isTooShort = secret.length < 32;
+
+  if (isPlaceholder || isTooShort) {
+    console.error('╔══════════════════════════════════════════════════════════════╗');
+    console.error('║                    🚨 安全警告 🚨                              ║');
+    console.error('║══════════════════════════════════════════════════════════════║');
+    console.error('║  JWT_SECRET 使用了不安全的默认值！                            ║');
+    console.error('║  这会让您的应用容易受到攻击。                                  ║');
+    console.error('║                                                               ║');
+
+    if (isPlaceholder) {
+      console.error('║  检测到占位符值：                                              ║');
+      console.error(`║    当前值: "${secret.substring(0, 20)}..."                   ║`);
+      console.error('║    请使用 generateSecretKey() 生成随机密钥                    ║');
+    }
+
+    if (isTooShort) {
+      console.error('║  JWT_SECRET 长度不足 32 字符                                  ║');
+    }
+
+    console.error('║                                                               ║');
+    console.error('║  修复方法：                                                   ║');
+    console.error('║  1. 生成随机密钥: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"  ║');
+    console.error('║  2. 或在 .env 文件中设置新的 JWT_SECRET                       ║');
+    console.error('╚══════════════════════════════════════════════════════════════╝');
+
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('JWT_SECRET is using an insecure default value in production');
+    }
+  }
+};
+
 // JWT Secret 管理
 const getJwtSecret = (): string => {
   const envSecret = process.env.JWT_SECRET;
-  
+
   if (envSecret) {
     // 从环境变量读取
+    validateJwtSecret(envSecret);
     if (envSecret.length < 32) {
       throw new Error('JWT_SECRET must be at least 32 characters long');
     }
     return envSecret;
   }
-  
+
   // 开发环境自动生成
   if (process.env.NODE_ENV !== 'production') {
     console.warn('⚠️  WARNING: Using auto-generated JWT secret in non-production environment');
     console.warn('⚠️  Set JWT_SECRET environment variable for production');
     return crypto.randomBytes(32).toString('hex');
   }
-  
+
   // 生产环境必须配置
   throw new Error('JWT_SECRET environment variable is required in production');
 };
