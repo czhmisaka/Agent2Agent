@@ -103,7 +103,7 @@ export class MessageService {
   async getPrivateHistory(userId: string, limit: number = 50): Promise<void> {
     try {
       const messages = await this.httpService.getPrivateMessages(userId, limit);
-      
+
       if (messages.length === 0) {
         console.log(chalk.yellow('\n📜 No private messages yet'));
         return;
@@ -111,18 +111,73 @@ export class MessageService {
 
       console.log(chalk.yellow(`\n📜 Private Message History (last ${messages.length}):`));
       console.log(chalk.gray('─'.repeat(60)));
-      
+
       messages.forEach((msg: any) => {
         const time = new Date(msg.created_at).toLocaleString();
         const sender = msg.sender_username;
         console.log(`${chalk.gray(time)}`);
         console.log(`${chalk.cyan(sender)}: ${msg.content}`);
       });
-      
+
       console.log(chalk.gray('─'.repeat(60)));
       console.log();
     } catch (error) {
       console.error(chalk.red('❌ Failed to get private messages:'), error);
+    }
+  }
+
+  async getMentions(limit: number = 50): Promise<void> {
+    try {
+      const mentions = await this.httpService.getMentions(limit);
+
+      if (!mentions || mentions.length === 0) {
+        console.log(chalk.yellow('\n💬 You have no mentions yet.'));
+        console.log(chalk.gray('  Mention someone with @username to get noticed\n'));
+        return;
+      }
+
+      console.log(chalk.yellow(`\n💬 Your Mentions (${mentions.length}):`));
+      console.log(chalk.gray('─'.repeat(60)));
+
+      mentions.forEach((mention: any) => {
+        const time = new Date(mention.createdAt || mention.timestamp).toLocaleString();
+        const sender = mention.senderUsername || mention.sender?.username || 'Unknown';
+        const groupName = mention.groupName || mention.groupId || '';
+        console.log(`${chalk.gray(time)} ${chalk.yellow(`in ${groupName}`)}`);
+        console.log(`  ${chalk.cyan(sender)}: "${mention.content || mention.preview || ''}"`);
+      });
+
+      console.log(chalk.gray('─'.repeat(60)));
+      console.log();
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to get mentions:'), error);
+    }
+  }
+
+  async getStats(userId?: string): Promise<void> {
+    try {
+      const stats = await this.httpService.getStats(userId);
+
+      if (!stats) {
+        console.log(chalk.yellow('\n📊 No stats available\n'));
+        return;
+      }
+
+      const { totalMessages = 0, totalWords = 0, mentions = 0, reactions = 0, groupsJoined = 0, messagesReceived = 0 } = stats;
+
+      console.log(chalk.yellow(`
+${chalk.bold('📊 Message Statistics')}
+${chalk.gray('─'.repeat(40))}
+  📝 Total Messages Sent:  ${chalk.cyan(totalMessages)}
+  📖 Total Words:          ${chalk.cyan(totalWords)}
+  💬 Times Mentioned:      ${chalk.cyan(mentions)}
+  👍 Reactions Received:   ${chalk.cyan(reactions)}
+  👥 Groups Joined:        ${chalk.cyan(groupsJoined)}
+  📥 Messages Received:     ${chalk.cyan(messagesReceived)}
+${chalk.gray('─'.repeat(40))}
+`));
+    } catch (error) {
+      console.error(chalk.red('❌ Failed to get stats:'), error);
     }
   }
 }

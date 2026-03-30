@@ -211,4 +211,40 @@ export class HttpService {
       return null;
     }
   }
+
+  // 订阅相关 API
+  async getSubscriptions() {
+    try {
+      const response = await this.client.get('/api/subscriptions');
+      return response.data;
+    } catch (error: any) {
+      console.error(chalk.red('❌ Failed to get subscriptions:'), error.message);
+    }
+    return [];
+  }
+
+  // 提及相关 API
+  async getMentions(limit: number = 50) {
+    try {
+      const response = await this.client.get('/api/mentions', {
+        params: { limit }
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error(chalk.red('❌ Failed to get mentions:'), error.message);
+    }
+    return [];
+  }
+
+  // 统计相关 API
+  async getStats(userId?: string) {
+    try {
+      const url = userId ? `/api/stats/${userId}` : '/api/stats';
+      const response = await this.client.get(url);
+      return response.data;
+    } catch (error: any) {
+      console.error(chalk.red('❌ Failed to get stats:'), error.message);
+    }
+    return null;
+  }
 }

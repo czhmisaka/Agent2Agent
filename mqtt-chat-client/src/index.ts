@@ -458,14 +458,26 @@ class ChatClient {
 
       case 'subscriptions':
         if (!this.requireLogin()) return;
-        console.log(renderer.renderInfo('Viewing your subscriptions...'));
-        // TODO: 实现查看订阅列表
+        {
+          const token = this.authService.getToken();
+          const userId = this.authService.getUserId();
+          if (token && userId) {
+            this.groupService.setCredentials(userId, token);
+            await this.groupService.getSubscriptions();
+          }
+        }
         break;
 
       case 'mention':
         if (!this.requireLogin()) return;
-        console.log(renderer.renderInfo('Viewing mentions...'));
-        // TODO: 实现查看提及列表
+        {
+          const token = this.authService.getToken();
+          const userId = this.authService.getUserId();
+          if (token && userId) {
+            this.messageService.setCredentials(userId, token);
+            await this.messageService.getMentions();
+          }
+        }
         break;
 
       case 'emoji':
@@ -479,8 +491,14 @@ class ChatClient {
 
       case 'stats':
         if (!this.requireLogin()) return;
-        console.log(renderer.renderInfo('Fetching stats...'));
-        // TODO: 实现统计功能
+        {
+          const token = this.authService.getToken();
+          const userId = this.authService.getUserId();
+          if (token && userId) {
+            this.messageService.setCredentials(userId, token);
+            await this.messageService.getStats(args[0] || undefined);
+          }
+        }
         break;
 
       case 'clear':
