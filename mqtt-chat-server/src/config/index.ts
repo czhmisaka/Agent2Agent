@@ -65,12 +65,22 @@ const getJwtSecret = (): string => {
 };
 
 // CORS 允许的域名列表
+// 生产环境警告：如果 CORS_ORIGIN=* 会允许任何网站发起跨域请求，这是严重的安全风险
 const getCorsAllowedOrigins = (): string[] => {
-  const envOrigins = process.env.CORS_ALLOWED_ORIGINS;
-  if (envOrigins) {
+  const envOrigins = process.env.CORS_ALLOWED_ORIGINS || process.env.CORS_ORIGIN;
+
+  // 生产环境检查：禁止使用通配符 *
+  if (process.env.NODE_ENV === 'production' && envOrigins === '*') {
+    console.error('🚨 CRITICAL SECURITY WARNING: CORS_ORIGIN=* is set in production!');
+    console.error('🚨 This allows ANY website to make cross-origin requests to your API.');
+    console.error('🚨 Please configure specific domains in CORS_ALLOWED_ORIGINS or CORS_ORIGIN.');
+    console.error('🚨 Example: CORS_ORIGIN=https://your-frontend-domain.com');
+  }
+
+  if (envOrigins && envOrigins !== '*') {
     return envOrigins.split(',').map(origin => origin.trim()).filter(origin => origin.length > 0);
   }
-  return []; // 生产环境应通过环境变量配置
+  return []; // 生产环境无配置时拒绝所有跨域请求
 };
 
 export const config = {

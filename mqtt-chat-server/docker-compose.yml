@@ -31,8 +31,11 @@ services:
       # 日志配置
       - LOG_LEVEL=debug
       
-      # CORS 配置（生产环境应该限制）
-      - CORS_ORIGIN=*
+      # CORS 配置
+      # 开发环境默认值：允许本地前端开发服务器
+      # 生产环境：必须配置具体的域名列表，示例：https://chat.example.com,https://admin.example.com
+      # 禁止在生产环境使用 * 或不配置 CORS_ORIGIN
+      - CORS_ORIGIN=http://localhost:3000,http://localhost:8080
       
       # 数据库
       - DB_PATH=/app/data/chat.db
