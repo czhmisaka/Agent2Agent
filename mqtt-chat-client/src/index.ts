@@ -294,12 +294,11 @@ class ChatClient {
           console.log(renderer.renderError('Usage: /create <groupname>'));
           return;
         }
-        const createResult = await this.authService.login(args[0], args[1]);
-        if (createResult) {
-          const token = this.authService.getToken();
-          const userId = this.authService.getUserId();
-          this.groupService.setCredentials(userId!, token!);
-          const result = await this.groupService.createGroup(args[0], token!, userId!);
+        const token = this.authService.getToken();
+        const userId = this.authService.getUserId();
+        if (token && userId) {
+          this.groupService.setCredentials(userId, token);
+          const result = await this.groupService.createGroup(args[0], token, userId);
           if (result) {
             this.currentGroupId = args[0]; // 使用 groupname 作为 ID
           }
