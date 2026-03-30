@@ -308,7 +308,9 @@ function handlePeerMessage(client: Client, topic: string, rawPayload: Buffer): v
     try {
       const msg = JSON.parse(rawPayload.toString());
       console.log(`💬 ${msg.payload?.sourceUsername || 'Unknown'} is typing...`);
-    } catch (e) {}
+    } catch (e) {
+      console.error('Failed to parse typing message:', e);
+    }
   }
 }
 
