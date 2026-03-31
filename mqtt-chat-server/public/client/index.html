@@ -567,7 +567,7 @@
                 mqttClient.end();
             }
             
-            const wsUrl = 'ws://localhost:8883/mqtt';
+            const wsUrl = 'ws://localhost:14083/mqtt';
             const topic = `chat/group/${groupId}/message`;
             
             mqttClient = mqtt.connect(wsUrl, {

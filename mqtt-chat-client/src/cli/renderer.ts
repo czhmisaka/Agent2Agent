@@ -4,6 +4,7 @@
  */
 
 import chalk from 'chalk';
+import { COMMAND_DEFINITIONS, CommandCategory } from './parser';
 
 export interface MessageData {
   type: string;
@@ -353,9 +354,60 @@ ${chalk.magenta('└────────────────────
   }
 
   /**
-   * 渲染帮助信息
+   * 渲染帮助信息 - 表格化版本
    */
   renderHelp(): string {
+    const terminalWidth = Math.min(process.stdout.columns || 80, 100);
+    const tableWidth = terminalWidth - 4;
+    
+    // 表头
+    const headerRow = `│ ${chalk.bold('分类').padEnd(6)} │ ${chalk.bold('命令').padEnd(26)} │ ${chalk.bold('别名').padEnd(8)} │ ${chalk.bold('说明').padEnd(28)} │`;
+    const separator = `├${'─'.repeat(8)}┬${'─'.repeat(28)}┬${'─'.repeat(10)}┬${'─'.repeat(30)}┤`;
+    
+    let output = '\n';
+    output += chalk.bold.blue(`╔${'═'.repeat(tableWidth)}╗`) + '\n';
+    output += chalk.bold.blue(`║${' MQTT Chat CLI - 命令帮助 '.padStart(Math.floor((tableWidth + 21) / 2)).padEnd(tableWidth)}║`) + '\n';
+    output += chalk.bold.blue(`╚${'═'.repeat(tableWidth)}╝`) + '\n\n';
+    
+    // 按分类渲染
+    COMMAND_DEFINITIONS.forEach((category: CommandCategory) => {
+      // 分类标题
+      output += `\n${chalk.bold.yellow(`${category.icon} ${category.name}`)}\n`;
+      output += chalk.gray('─'.repeat(terminalWidth)) + '\n';
+      
+      // 表头
+      output += `│ ${chalk.gray('分类').padEnd(6)} │ ${chalk.gray('命令').padEnd(26)} │ ${chalk.gray('别名').padEnd(8)} │ ${chalk.gray('说明').padEnd(28)} │\n`;
+      output += `├${'─'.repeat(8)}┼${'─'.repeat(28)}┼${'─'.repeat(10)}┼${'─'.repeat(30)}┤\n`;
+      
+      // 命令行
+      category.commands.forEach((cmd) => {
+        const aliases = cmd.aliases.length > 0 ? cmd.aliases.join(', ') : '-';
+        const args = cmd.args ? ` ${cmd.args}` : '';
+        const cmdStr = `${cmd.command}${args}`.padEnd(26);
+        const aliasStr = aliases.padEnd(8);
+        const descStr = cmd.description.padEnd(28);
+        
+        output += `│ ${category.icon.padEnd(6)} │ ${chalk.cyan(cmdStr)} │ ${chalk.gray(aliasStr)} │ ${descStr} │\n`;
+      });
+    });
+    
+    // 快捷键提示
+    output += '\n' + chalk.gray('─'.repeat(terminalWidth)) + '\n';
+    output += `${chalk.bold('💡 快捷键')}\n`;
+    output += `  ${chalk.gray('↑/↓')} ${chalk.white('上下翻页')}    `;
+    output += `${chalk.gray('Tab')} ${chalk.white('自动补全')}    `;
+    output += `${chalk.gray('Ctrl+C')} ${chalk.white('退出')}\n`;
+    output += `  ${chalk.gray('@')} ${chalk.white('触发用户选择')}  `;
+    output += `${chalk.gray(':')} ${chalk.white('触发表情补全')}  `;
+    output += `${chalk.gray('/')} ${chalk.white('触发命令补全')}\n`;
+    
+    return output;
+  }
+
+  /**
+   * 渲染帮助信息 - 简洁版本（备用）
+   */
+  renderHelpSimple(): string {
     return `
 ${chalk.bold('📖 命令帮助')}
 

@@ -14,8 +14,11 @@ export const useChatStore = defineStore('chat', () => {
   const groups = ref<Group[]>([])
   const currentGroup = ref<Group | null>(null)
   const messages = ref<Message[]>([])
+  const inputMessage = ref('') // 修复：添加 inputMessage 状态
   const mqttClient = ref<mqtt.MqttClient | null>(null)
   const mqttConnected = ref(false)
+  const reconnectAttempts = ref(0)
+  const maxReconnectAttempts = 5
   const loading = ref(false)
   const error = ref<string | null>(null)
   // 存储消息的反应 { messageId: MessageReaction[] }
@@ -131,7 +134,7 @@ export const useChatStore = defineStore('chat', () => {
       mqttClient.value.end({ force: true })
     }
 
-    const wsUrl = 'ws://localhost:8883/mqtt'
+    const wsUrl = 'ws://localhost:14083/mqtt'
     const topic = `chat/group/${groupId}/message`
 
     mqttClient.value = mqtt.connect(wsUrl, {
@@ -157,8 +160,19 @@ export const useChatStore = defineStore('chat', () => {
         // 处理反应更新消息
         if (msgData.type === 'reactions_update') {
           handleReactionsUpdate(msgData as ReactionsUpdate)
+        } else if (msgData.type === 'message') {
+          // MQTT 广播消息格式：payload.sender.{userId, username, nickname}
+          const mqttMessage: Message = {
+            sender_id: msgData.payload?.sender?.userId || '',
+            username: msgData.payload?.sender?.username || msgData.payload?.username || 'Unknown',
+            content: msgData.payload?.content || msgData.content || '',
+            group_id: currentGroup.value?.id || msgData.meta?.groupId || '',
+            created_at: msgData.timestamp || new Date().toISOString()
+          }
+          addMessage(mqttMessage)
         } else {
-          addMessage(msgData)
+          // 其他类型消息（system 等）
+          addMessage(msgData as any)
         }
       } catch (err) {
         console.error('Parse message error:', err)
@@ -173,16 +187,34 @@ export const useChatStore = defineStore('chat', () => {
     mqttClient.value.on('close', () => {
       console.log('MQTT Disconnected')
       mqttConnected.value = false
+      // 修复：添加自动重连逻辑（指数退避）
+      if (reconnectAttempts.value < maxReconnectAttempts.value && currentGroup.value) {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.value), 30000)
+        reconnectAttempts.value++
+        console.log(`MQTT Reconnecting in ${delay}ms (attempt ${reconnectAttempts.value}/${maxReconnectAttempts.value})`)
+        setTimeout(() => {
+          if (!mqttConnected.value && currentGroup.value) {
+            connectMQTT(currentGroup.value.id)
+          }
+        }, delay)
+      }
+    })
+
+    mqttClient.value.on('reconnect', () => {
+      console.log('MQTT Reconnecting...')
     })
   }
 
   function addMessage(message: Message) {
-    // 避免重复添加
+    // 避免重复添加 - 使用消息ID优先，其次使用sender_id + content + created_at组合
     const exists = messages.value.some(
       (msg) =>
-        msg.sender_id === message.sender_id &&
-        msg.content === message.content &&
-        msg.created_at === message.created_at
+        // 优先使用消息ID去重（如果有）
+        (message.id && msg.id === message.id) ||
+        // 或者使用sender_id + content + created_at组合
+        (msg.sender_id === message.sender_id &&
+          msg.content === message.content &&
+          msg.created_at === message.created_at)
     )
 
     if (!exists) {
@@ -234,6 +266,7 @@ export const useChatStore = defineStore('chat', () => {
     groups,
     currentGroup,
     messages,
+    inputMessage,
     mqttConnected,
     loading,
     error,

@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 # 配置
 SERVER_URL="http://localhost:14050"
-MQTT_WS_PORT="8883"
+MQTT_WS_PORT="14083"
 USERNAME="bob_cli"
 PASSWORD="Bob123"
 

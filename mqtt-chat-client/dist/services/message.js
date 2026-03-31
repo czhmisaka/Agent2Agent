@@ -127,7 +127,7 @@ class MessageService {
             if (!mentions || mentions.length === 0) {
                 console.log(chalk_1.default.yellow('\n💬 You have no mentions yet.'));
                 console.log(chalk_1.default.gray('  Mention someone with @username to get noticed\n'));
-                return;
+                return [];
             }
             console.log(chalk_1.default.yellow(`\n💬 Your Mentions (${result.total || mentions.length}):`));
             if (result.unreadCount > 0) {
@@ -144,10 +144,12 @@ class MessageService {
                 console.log(`   ${chalk_1.default.gray(`[ID: ${mention.id}]`)}`);
             });
             console.log(chalk_1.default.gray('─'.repeat(60)));
-            console.log(chalk_1.default.gray('\n  Commands: /mention read <id> | /mention delete <id> | /mention clear\n'));
+            console.log(chalk_1.default.gray('\n  Commands: /mention read <序号> | /mention delete <序号> | /mention clear\n'));
+            return mentions;
         }
         catch (error) {
             console.error(chalk_1.default.red('❌ Failed to get mentions:'), error);
+            return [];
         }
     }
     async deleteMention(mentionId) {

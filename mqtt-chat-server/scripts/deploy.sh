@@ -105,7 +105,7 @@ if curl -s http://localhost:3000/health > /dev/null 2>&1; then
     echo -e "\n📡 服务端口:"
     echo "   • HTTP API:  http://localhost:3000"
     echo "   • MQTT TCP:  localhost:1883"
-    echo "   • MQTT WS:   localhost:8883"
+    echo "   • MQTT WS:   localhost:14083"
     
     echo -e "\n🔧 常用命令:"
     echo "   • 查看日志:   docker-compose logs -f"

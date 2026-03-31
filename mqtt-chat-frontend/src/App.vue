@@ -8,6 +8,13 @@ const chatStore = useChatStore()
 
 const isConnecting = ref(false)
 
+// XSS 防护：HTML 转义函数
+function escapeHtml(text: string): string {
+  const div = document.createElement('div')
+  div.textContent = text
+  return div.innerHTML
+}
+
 onMounted(() => {
   console.log('MQTT Chat Frontend 已加载')
 })
@@ -26,9 +33,9 @@ onMounted(() => {
     <main class="app-main">
       <div v-if="!authStore.isAuthenticated" class="login-section">
         <h2>登录</h2>
-        <form @submit.prevent="authStore.login">
-          <input v-model="authStore.username" placeholder="用户名" />
-          <input v-model="authStore.password" type="password" placeholder="密码" />
+        <form @submit.prevent="authStore.loginUser(username, password)">
+          <input v-model="username" placeholder="用户名" />
+          <input v-model="password" type="password" placeholder="密码" />
           <button type="submit" :disabled="isConnecting">
             {{ isConnecting ? '连接中...' : '登录' }}
           </button>
@@ -48,7 +55,7 @@ onMounted(() => {
         <div class="chat-area">
           <div class="messages">
             <div v-for="msg in chatStore.messages" :key="msg.id" class="message">
-              <strong>{{ msg.username }}:</strong> {{ msg.content }}
+              <strong>{{ msg.username }}:</strong> <span v-html="escapeHtml(msg.content)"></span>
             </div>
           </div>
           

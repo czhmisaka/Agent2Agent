@@ -43,6 +43,7 @@ class ChatClient {
   private commandHistory: string[] = [];
   private historyIndex: number = -1;
   private isDaemonMode: boolean = false;
+  private mentionsCache: any[] = [];
 
   constructor() {
     this.mqttClient = new MqttClientService();
@@ -745,13 +746,28 @@ class ChatClient {
           if (token && userId) {
             this.messageService.setCredentials(userId, token);
             
-            // /mention read <id> - 标记单条已读
+            // 辅助函数：根据序号或ID获取mention ID
+            const getMentionId = (input: string): string | null => {
+              const index = parseInt(input) - 1;
+              if (!isNaN(index) && index >= 0 && index < this.mentionsCache.length) {
+                return this.mentionsCache[index].id;
+              }
+              // 如果不是有效序号，当作UUID处理
+              return input;
+            };
+            
+            // /mention read <序号|id> - 标记单条已读
             if (args[0] === 'read' && args[1]) {
-              const success = await this.messageService.markMentionAsRead(args[1]);
-              if (success) {
-                console.log(renderer.renderSuccess('Mention marked as read'));
+              const mentionId = getMentionId(args[1] as string);
+              if (mentionId) {
+                const success = await this.messageService.markMentionAsRead(mentionId);
+                if (success) {
+                  console.log(renderer.renderSuccess('Mention marked as read'));
+                } else {
+                  console.log(renderer.renderError('Failed to mark mention as read'));
+                }
               } else {
-                console.log(renderer.renderError('Failed to mark mention as read'));
+                console.log(renderer.renderError('Invalid mention ID'));
               }
             }
             // /mention read --all - 全部标记已读
@@ -759,13 +775,16 @@ class ChatClient {
               const count = await this.messageService.markAllMentionsAsRead();
               console.log(renderer.renderSuccess(`Marked ${count} mentions as read`));
             }
-            // /mention delete <id> - 删除单条
+            // /mention delete <序号|id> - 删除单条
             else if (args[0] === 'delete' && args[1]) {
-              const success = await this.messageService.deleteMention(args[1]);
-              if (success) {
-                console.log(renderer.renderSuccess('Mention deleted'));
-              } else {
-                console.log(renderer.renderError('Failed to delete mention'));
+              const mentionId = getMentionId(args[1] as string);
+              if (mentionId) {
+                const success = await this.messageService.deleteMention(mentionId);
+                if (success) {
+                  console.log(renderer.renderSuccess('Mention deleted'));
+                } else {
+                  console.log(renderer.renderError('Failed to delete mention'));
+                }
               }
             }
             // /mention clear - 清空已读的
@@ -781,7 +800,7 @@ class ChatClient {
             // /mention - 查看列表
             else {
               const limit = args[0] ? parseInt(args[0]) : 50;
-              await this.messageService.getMentions(limit);
+              this.mentionsCache = await this.messageService.getMentions(limit);
             }
           }
         }

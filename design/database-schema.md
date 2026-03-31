@@ -226,3 +226,148 @@ database/
 ## 📝 数据初始化
 
 首次运行自动创建数据库和表结构。
+
+---
+
+## 📋 扩展表结构（v2.0+）
+
+以下表结构在代码中已实现，文档待更新：
+
+### 6. message_reactions 消息反应表
+
+```sql
+CREATE TABLE message_reactions (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  emoji TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (message_id) REFERENCES messages(id),
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  UNIQUE(message_id, user_id, emoji)
+);
+
+CREATE INDEX idx_reactions_message ON message_reactions(message_id);
+CREATE INDEX idx_reactions_user ON message_reactions(user_id);
+```
+
+### 7. message_flags 消息标记表
+
+```sql
+CREATE TABLE message_flags (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  flag_type TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (message_id) REFERENCES messages(id),
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  UNIQUE(message_id, flag_type)
+);
+
+-- flag_type: 'highlight', 'pin'
+CREATE INDEX idx_flags_message ON message_flags(message_id);
+```
+
+### 8. message_mentions 消息提及表
+
+```sql
+CREATE TABLE message_mentions (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  mentioned_user_id TEXT NOT NULL,
+  sender_id TEXT NOT NULL,
+  group_id TEXT,
+  is_read INTEGER DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (message_id) REFERENCES messages(id),
+  FOREIGN KEY (mentioned_user_id) REFERENCES users(id),
+  FOREIGN KEY (sender_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_mentions_user ON message_mentions(mentioned_user_id);
+CREATE INDEX idx_mentions_read ON message_mentions(is_read);
+```
+
+### 9. subscriptions 订阅表
+
+```sql
+CREATE TABLE subscriptions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  subscription_type TEXT NOT NULL,
+  subscription_value TEXT NOT NULL,
+  group_id TEXT,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (group_id) REFERENCES groups(id)
+);
+
+-- subscription_type: 'keyword', 'topic', 'user'
+CREATE INDEX idx_subs_user ON subscriptions(user_id);
+CREATE INDEX idx_subs_active ON subscriptions(is_active);
+```
+
+### 10. custom_emojis 自定义表情表
+
+```sql
+CREATE TABLE custom_emojis (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  emoji TEXT NOT NULL,
+  creator_id TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (creator_id) REFERENCES users(id)
+);
+```
+
+### 11. custom_commands 自定义指令表
+
+```sql
+CREATE TABLE custom_commands (
+  id TEXT PRIMARY KEY,
+  group_id TEXT,
+  command TEXT NOT NULL,
+  response TEXT NOT NULL,
+  creator_id TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (group_id) REFERENCES groups(id),
+  FOREIGN KEY (creator_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_commands_group ON custom_commands(group_id);
+```
+
+### 12. message_stats 消息统计表
+
+```sql
+CREATE TABLE message_stats (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  date DATE NOT NULL,
+  message_count INTEGER DEFAULT 0,
+  word_count INTEGER DEFAULT 0,
+  UNIQUE(user_id, date),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_stats_user_date ON message_stats(user_id, date);
+```
+
+### 13. offline_actions 离线操作队列表
+
+```sql
+CREATE TABLE offline_actions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  is_processed INTEGER DEFAULT 0,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE INDEX idx_offline_user ON offline_actions(user_id);
+CREATE INDEX idx_offline_unprocessed ON offline_actions(is_processed);
+```

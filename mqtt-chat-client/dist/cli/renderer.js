@@ -9,6 +9,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.renderer = exports.MessageRenderer = void 0;
 const chalk_1 = __importDefault(require("chalk"));
+const parser_1 = require("./parser");
 class MessageRenderer {
     currentUsername = '';
     typingUsers = new Map();
@@ -243,9 +244,51 @@ ${chalk_1.default.magenta('└────────────────�
         });
     }
     /**
-     * 渲染帮助信息
+     * 渲染帮助信息 - 表格化版本
      */
     renderHelp() {
+        const terminalWidth = Math.min(process.stdout.columns || 80, 100);
+        const tableWidth = terminalWidth - 4;
+        // 表头
+        const headerRow = `│ ${chalk_1.default.bold('分类').padEnd(6)} │ ${chalk_1.default.bold('命令').padEnd(26)} │ ${chalk_1.default.bold('别名').padEnd(8)} │ ${chalk_1.default.bold('说明').padEnd(28)} │`;
+        const separator = `├${'─'.repeat(8)}┬${'─'.repeat(28)}┬${'─'.repeat(10)}┬${'─'.repeat(30)}┤`;
+        let output = '\n';
+        output += chalk_1.default.bold.blue(`╔${'═'.repeat(tableWidth)}╗`) + '\n';
+        output += chalk_1.default.bold.blue(`║${' MQTT Chat CLI - 命令帮助 '.padStart(Math.floor((tableWidth + 21) / 2)).padEnd(tableWidth)}║`) + '\n';
+        output += chalk_1.default.bold.blue(`╚${'═'.repeat(tableWidth)}╝`) + '\n\n';
+        // 按分类渲染
+        parser_1.COMMAND_DEFINITIONS.forEach((category) => {
+            // 分类标题
+            output += `\n${chalk_1.default.bold.yellow(`${category.icon} ${category.name}`)}\n`;
+            output += chalk_1.default.gray('─'.repeat(terminalWidth)) + '\n';
+            // 表头
+            output += `│ ${chalk_1.default.gray('分类').padEnd(6)} │ ${chalk_1.default.gray('命令').padEnd(26)} │ ${chalk_1.default.gray('别名').padEnd(8)} │ ${chalk_1.default.gray('说明').padEnd(28)} │\n`;
+            output += `├${'─'.repeat(8)}┼${'─'.repeat(28)}┼${'─'.repeat(10)}┼${'─'.repeat(30)}┤\n`;
+            // 命令行
+            category.commands.forEach((cmd) => {
+                const aliases = cmd.aliases.length > 0 ? cmd.aliases.join(', ') : '-';
+                const args = cmd.args ? ` ${cmd.args}` : '';
+                const cmdStr = `${cmd.command}${args}`.padEnd(26);
+                const aliasStr = aliases.padEnd(8);
+                const descStr = cmd.description.padEnd(28);
+                output += `│ ${category.icon.padEnd(6)} │ ${chalk_1.default.cyan(cmdStr)} │ ${chalk_1.default.gray(aliasStr)} │ ${descStr} │\n`;
+            });
+        });
+        // 快捷键提示
+        output += '\n' + chalk_1.default.gray('─'.repeat(terminalWidth)) + '\n';
+        output += `${chalk_1.default.bold('💡 快捷键')}\n`;
+        output += `  ${chalk_1.default.gray('↑/↓')} ${chalk_1.default.white('上下翻页')}    `;
+        output += `${chalk_1.default.gray('Tab')} ${chalk_1.default.white('自动补全')}    `;
+        output += `${chalk_1.default.gray('Ctrl+C')} ${chalk_1.default.white('退出')}\n`;
+        output += `  ${chalk_1.default.gray('@')} ${chalk_1.default.white('触发用户选择')}  `;
+        output += `${chalk_1.default.gray(':')} ${chalk_1.default.white('触发表情补全')}  `;
+        output += `${chalk_1.default.gray('/')} ${chalk_1.default.white('触发命令补全')}\n`;
+        return output;
+    }
+    /**
+     * 渲染帮助信息 - 简洁版本（备用）
+     */
+    renderHelpSimple() {
         return `
 ${chalk_1.default.bold('📖 命令帮助')}
 

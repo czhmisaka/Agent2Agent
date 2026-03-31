@@ -130,9 +130,13 @@ export declare class MessageRenderer {
      */
     private formatMentions;
     /**
-     * 渲染帮助信息
+     * 渲染帮助信息 - 表格化版本
      */
     renderHelp(): string;
+    /**
+     * 渲染帮助信息 - 简洁版本（备用）
+     */
+    renderHelpSimple(): string;
     /**
      * 渲染统计信息
      */

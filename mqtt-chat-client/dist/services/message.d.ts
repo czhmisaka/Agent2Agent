@@ -12,7 +12,7 @@ export declare class MessageService {
     sendPrivateMessage(receiverId: string, content: string, senderId: string): Promise<boolean>;
     getHistory(groupId: string, limit?: number): Promise<void>;
     getPrivateHistory(userId: string, limit?: number): Promise<void>;
-    getMentions(limit?: number): Promise<void>;
+    getMentions(limit?: number): Promise<any[]>;
     deleteMention(mentionId: string): Promise<boolean>;
     markMentionAsRead(mentionId: string): Promise<boolean>;
     clearMentions(filter?: 'read' | 'all'): Promise<number>;

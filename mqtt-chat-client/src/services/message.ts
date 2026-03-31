@@ -132,7 +132,7 @@ export class MessageService {
     }
   }
 
-  async getMentions(limit: number = 50): Promise<void> {
+  async getMentions(limit: number = 50): Promise<any[]> {
     try {
       const result = await this.httpService.getMentions({ limit });
       const mentions = result?.mentions || [];
@@ -140,7 +140,7 @@ export class MessageService {
       if (!mentions || mentions.length === 0) {
         console.log(chalk.yellow('\n💬 You have no mentions yet.'));
         console.log(chalk.gray('  Mention someone with @username to get noticed\n'));
-        return;
+        return [];
       }
 
       console.log(chalk.yellow(`\n💬 Your Mentions (${result.total || mentions.length}):`));
@@ -161,9 +161,12 @@ export class MessageService {
       });
 
       console.log(chalk.gray('─'.repeat(60)));
-      console.log(chalk.gray('\n  Commands: /mention read <id> | /mention delete <id> | /mention clear\n'));
+      console.log(chalk.gray('\n  Commands: /mention read <序号> | /mention delete <序号> | /mention clear\n'));
+      
+      return mentions;
     } catch (error) {
       console.error(chalk.red('❌ Failed to get mentions:'), error);
+      return [];
     }
   }
 

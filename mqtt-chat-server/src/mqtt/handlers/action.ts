@@ -549,7 +549,7 @@ function handleUnsubscribe(
     `).run(userId, type, value);
 
     if (result.changes === 0) {
-      sendActionResponse(client, `chat/group/${undefined}/action`, {
+      sendActionResponse(client, `chat/user/${userId}/action`, {
         success: false,
         action,
         error: 'Subscription not found',

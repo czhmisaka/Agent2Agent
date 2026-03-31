@@ -184,7 +184,7 @@ describe('JWT Integration with Express Routes', () => {
     config: {
       jwt: { secret: TEST_JWT_SECRET, expiresIn: '7d' },
       cors: { allowedOrigins: ['http://localhost:14070'] },
-      mqtt: { port: 1883, websocketPort: 8883 },
+      mqtt: { port: 14080, websocketPort: 14083 },
       http: { port: 3000 },
       database: { path: ':memory:' }
     }

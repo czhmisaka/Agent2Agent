@@ -6,6 +6,25 @@
 
 ---
 
+## 🔑 测试凭据
+
+### 用户账户
+| 用户名 | 密码 | 用途 |
+|--------|------|------|
+| czhmisaka | Czh12345 | 主测试用户 |
+| agentbot | agentbot123 | 机器人账户 |
+
+### 群组信息
+| 群组名称 | 群组 ID | 成员 |
+|----------|---------|------|
+| test | 36a11e6a-28c1-4a40-b4b9-823ce16d8994 | czhmisaka, agentbot |
+
+### ⚠️ 重要提示
+- **密码要求**：至少 8 个字符 + 至少一个大写字母
+- 示例：`Czh12345` ✅ / `czh123` ❌ (缺少大写字母)
+
+---
+
 ## 🎯 核心能力
 
 ### 1. 命令行参数模式（推荐）
@@ -24,7 +43,7 @@ mqtt-chat <用户名> <密码> [群组ID] [消息]
 | 参数 | 必填 | 说明 |
 |------|------|------|
 | 用户名 | ✅ | 登录用户名 |
-| 密码 | ✅ | 登录密码 |
+| 密码 | ✅ | 登录密码（需满足复杂度要求） |
 | 群组ID | ❌ | 加入的群组，不指定则保持连接待命 |
 | 消息 | ❌ | 发送的消息内容 |
 
@@ -35,7 +54,7 @@ mqtt-chat <用户名> <密码> [群组ID] [消息]
 ### 🔐 1. 登录并保持连接
 
 ```bash
-mqtt-chat <用户名> <密码>
+mqtt-chat czhmisaka Czh12345
 ```
 
 **使用场景**：
@@ -52,28 +71,39 @@ mqtt-chat <用户名> <密码> <群组ID> <消息内容>
 **示例**：
 ```bash
 # 发送简单消息
-mqtt-chat alice password123 general "Hello everyone!"
+mqtt-chat czhmisaka Czh12345 test "Hello everyone!"
 
 # 发送提及用户的消息
-mqtt-chat alice password123 general "@bob 你好！"
+mqtt-chat czhmisaka Czh12345 test "@agentbot 你好！"
 
 # 发送带表情的消息
-mqtt-chat alice password123 general "这个方案很好 :thumbsup:"
+mqtt-chat czhmisaka Czh12345 test "这个方案很好 👍"
 ```
 
-### 📊 3. 查看消息
+### 🤖 3. agentbot 自动回复
+
+agentbot 是一个自动回复机器人，监听 test 群组的消息。当消息包含 `@agentbot` 时会自动回复。
+
+```bash
+# 用户发送消息提及 agentbot
+mqtt-chat czhmisaka Czh12345 test "@agentbot 你好"
+
+# agentbot 会自动回复
+```
+
+### 📊 4. 查看消息
 
 ```bash
 # 查看群组历史消息
 # 需要先进入交互模式
-mqtt-chat alice password123
-> /history <群组ID> [条数]
+mqtt-chat czhmisaka Czh12345 test
+> /history test 50
 ```
 
-### 👥 4. 查看在线用户
+### 👥 5. 查看在线用户
 
 ```bash
-mqtt-chat alice password123
+mqtt-chat czhmisaka Czh12345 test
 > /who
 ```
 
@@ -99,7 +129,7 @@ def send_message(username, password, group_id, message):
     return result.stdout, result.stderr
 
 # 使用
-stdout, stderr = send_message("alice", "password123", "general", "Hello!")
+stdout, stderr = send_message("czhmisaka", "Czh12345", "test", "Hello!")
 ```
 
 ### 示例 2: JavaScript/Node.js 调用
@@ -119,27 +149,74 @@ function sendMessage(username, password, groupId, message) {
 }
 
 // 使用
-const result = sendMessage("alice", "password123", "general", "Hello!");
+const result = sendMessage("czhmisaka", "Czh12345", "test", "Hello!");
 ```
 
-### 示例 3: Shell 脚本
+### 示例 3: 直接 MQTT 连接（高级）
 
-```bash
-#!/bin/bash
+```javascript
+const mqtt = require('mqtt');
+const http = require('http');
 
-USERNAME="alice"
-PASSWORD="password123"
-GROUP_ID="general"
+// 1. 登录获取 JWT token
+async function login() {
+  return new Promise((resolve, reject) => {
+    const req = http.request({
+      hostname: 'localhost',
+      port: 14070,
+      path: '/api/users/login',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve(JSON.parse(data)));
+    });
+    req.on('error', reject);
+    req.write(JSON.stringify({ username: 'czhmisaka', password: 'Czh12345' }));
+    req.end();
+  });
+}
 
-# 发送消息
-mqtt-chat $USERNAME $PASSWORD $GROUP_ID "Message from script"
+async function main() {
+  const loginRes = await login();
+  if (!loginRes.success) {
+    console.error('登录失败:', loginRes);
+    return;
+  }
 
-# 检查执行结果
-if [ $? -eq 0 ]; then
-    echo "消息发送成功"
-else
-    echo "消息发送失败"
-fi
+  // 2. 使用 JWT token 连接 MQTT
+  const client = mqtt.connect('mqtt://localhost:14080', {
+    clientId: `agent-${Date.now()}`,
+    username: loginRes.username,
+    password: loginRes.token  // JWT token
+  });
+
+  client.on('connect', () => {
+    console.log('✅ MQTT 已连接');
+    
+    // 3. 订阅消息
+    client.subscribe('chat/group/test/message');
+    
+    // 4. 发送消息
+    client.publish('chat/group/test/action', JSON.stringify({
+      type: 'message',
+      timestamp: new Date().toISOString(),
+      payload: {
+        userId: loginRes.userId,
+        token: loginRes.token,
+        content: 'Hello from code!'
+      },
+      meta: { groupId: 'test' }
+    }), { qos: 1 });
+  });
+
+  client.on('message', (topic, message) => {
+    console.log('📩 收到:', message.toString());
+  });
+}
+
+main();
 ```
 
 ---
@@ -153,7 +230,7 @@ fi
    └─ 检查 mqtt-chat 是否可用
 
 2. 验证凭据（可选）
-   └─ mqtt-chat --validate <user> <pwd>
+   └─ mqtt-chat --validate czhmisaka Czh12345
 
 3. 执行业务操作
    ├─ 发送消息
@@ -213,12 +290,13 @@ def safe_send_message(username, password, group_id, message):
 |------|------|------|
 | HTTP API | 14070 | 认证、群组管理 |
 | MQTT Broker | 14080 | 消息传输 |
+| WebSocket | 14083 | WebSocket 连接 |
 
 ### 检查服务状态
 
 ```bash
 # 检查 HTTP API
-curl http://localhost:14070/health
+curl http://localhost:14070/api/users/login -X POST -H "Content-Type: application/json" -d '{"username":"czhmisaka","password":"Czh12345"}'
 
 # 检查 MQTT（需要 mosquitto 或 mqtt-cli）
 # nc -zv localhost 14080
@@ -266,8 +344,8 @@ curl http://localhost:14070/health
 2. **不要硬编码凭据**
    ```python
    # ❌ 不好
-   USERNAME = "alice"
-   PASSWORD = "password123"
+   USERNAME = "czhmisaka"
+   PASSWORD = "Czh12345"
    
    # ✅ 好
    USERNAME = os.getenv("CHAT_USERNAME")
@@ -291,8 +369,8 @@ curl http://localhost:14070/health
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
-| `/register <user> <pwd>` | 注册账号 | `/register alice pass123` |
-| `/login <user> <pwd>` | 登录账号 | `/login alice pass123` |
+| `/register <user> <pwd>` | 注册账号 | `/register alice Czh12345` |
+| `/login <user> <pwd>` | 登录账号 | `/login czhmisaka Czh12345` |
 | `/who` | 查看在线用户 | `/who` |
 
 ### 群组命令
@@ -300,19 +378,27 @@ curl http://localhost:14070/health
 | 命令 | 说明 | 示例 |
 |------|------|------|
 | `/create <name>` | 创建群组 | `/create team-chat` |
-| `/join <id>` | 加入群组 | `/join general` |
-| `/leave <id>` | 离开群组 | `/leave general` |
+| `/join <id>` | 加入群组 | `/join test` |
+| `/leave <id>` | 离开群组 | `/leave test` |
 | `/list` | 列出群组 | `/list` |
-| `/members <id>` | 查看成员 | `/members general` |
+| `/members <id>` | 查看成员 | `/members test` |
 
 ### 消息命令
 
 | 命令 | 说明 | 示例 |
 |------|------|------|
 | 直接输入 | 发送消息 | `Hello!` |
-| `/send <g> <msg>` | 指定群组发送 | `/send general Hello` |
-| `/history <g> [n]` | 查看历史 | `/history general 50` |
+| `/send <g> <msg>` | 指定群组发送 | `/send test Hello` |
+| `/history <g> [n]` | 查看历史 | `/history test 50` |
 | `/mention` | 查看提及我的 | `/mention` |
+
+### 机器人相关
+
+| 命令 | 说明 | 示例 |
+|------|------|------|
+| `@agentbot` | 触发自动回复 | `@agentbot 你好` |
+| `@所有人` | 提及所有成员 | `@所有人 开会了` |
+| `@all` | 同上 | `@all 重要通知` |
 
 ---
 
@@ -322,28 +408,44 @@ curl http://localhost:14070/health
 
 ```bash
 # 捕获所有输出
-mqtt-chat alice pass123 general "test" 2>&1
+mqtt-chat czhmisaka Czh12345 test "test" 2>&1
 ```
 
 ### 2. 验证凭据
 
 ```bash
 # 不连接，只验证
-mqtt-chat --validate alice pass123
+curl -X POST http://localhost:14070/api/users/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"czhmisaka","password":"Czh12345"}'
 
-# 成功输出：✅ Credentials valid
-# 失败输出：❌ Invalid credentials
+# 成功输出：{"success":true,"userId":"...","username":"czhmisaka",...}
+# 失败输出：{"error":"Username or password incorrect","code":1002}
 ```
 
 ### 3. 交互模式调试
 
 ```bash
 # 进入交互模式，逐步操作
-mqtt-chat alice pass123
+mqtt-chat czhmisaka Czh12345 test
 
 > /who
 > /list
-> /history general 10
+> /history test 10
+> /mention
+```
+
+### 4. 直接查看数据库
+
+```bash
+# 查看消息
+sqlite3 data/chat.db "SELECT * FROM messages ORDER BY created_at DESC LIMIT 10;"
+
+# 查看提及
+sqlite3 data/chat.db "SELECT * FROM message_mentions;"
+
+# 查看用户
+sqlite3 data/chat.db "SELECT username FROM users;"
 ```
 
 ---
@@ -353,9 +455,11 @@ mqtt-chat alice pass123
 - **README**: `mqtt-chat-client/README.md`
 - **源码**: `mqtt-chat-client/src/`
 - **命令帮助**: `mqtt-chat` 后输入 `/help`
+- **服务器日志**: 查看运行服务器的终端输出
 
 ---
 
-**版本**: v2.0 (Extended)  
+**版本**: v3.0 (Updated with credentials)  
 **创建日期**: 2026-03-31  
+**最后更新**: 2026-03-31  
 **适用对象**: AI Agent、自动化脚本

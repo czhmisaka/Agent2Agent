@@ -411,7 +411,7 @@ function handleUnsubscribe(client, userId, type, value, action, correlationId) {
       WHERE user_id = ? AND subscription_type = ? AND subscription_value = ?
     `).run(userId, type, value);
         if (result.changes === 0) {
-            sendActionResponse(client, `chat/group/${undefined}/action`, {
+            sendActionResponse(client, `chat/user/${userId}/action`, {
                 success: false,
                 action,
                 error: 'Subscription not found',

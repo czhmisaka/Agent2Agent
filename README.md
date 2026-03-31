@@ -52,7 +52,7 @@ npm start
 服务器将启动在以下端口：
 - MQTT TCP: `14080`
 - MQTT WebSocket: `14083`
-- HTTP API: `3000`
+- HTTP API: `14070`
 
 ### 2. 配置客户端一键启动（推荐）
 
@@ -207,7 +207,7 @@ export const config = {
   },
   http: {
     host: 'localhost',      // HTTP API 地址
-    port: 3000             // HTTP API 端口
+    port: 14070             // HTTP API 端口
   }
 };
 ```

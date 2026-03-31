@@ -7,7 +7,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.parser = exports.CommandParser = exports.ALL_COMMANDS = void 0;
+exports.parser = exports.CommandParser = exports.ALL_COMMANDS = exports.COMMAND_DEFINITIONS = void 0;
 const uuid_1 = require("uuid");
 const inquirer_1 = __importDefault(require("inquirer"));
 // ==================== 常量定义 ====================
@@ -43,27 +43,111 @@ const ACTION_COMMANDS = [
     'react',
     'recall'
 ];
-// 所有命令列表（用于补全）
-exports.ALL_COMMANDS = [
-    // 基础指令
-    '/help', '/login', '/register', '/who', '/list', '/exit', '/quit',
-    // 群组指令
-    '/join', '/leave', '/create', '/groups', '/members', '/send', '/history', '/users',
-    // 消息操作
-    '/highlight', '/pin', '/unpin', '/react', '/recall',
-    // 提及功能
-    '/mention',
-    // 订阅功能
-    '/subscribe', '/subscriptions', '/unsubscribe',
-    // 表情功能
-    '/emoji',
-    // 统计功能
-    '/stats',
-    // 本地指令
-    '/clear',
-    // 别名
-    '/h', '/?', '/w', '/l', '/s', '/sub', '/unsub', '/e', '/hl', '/r', '/m'
+// 命令定义表（用于生成帮助和补全）
+exports.COMMAND_DEFINITIONS = [
+    {
+        name: '认证',
+        icon: '🔐',
+        commands: [
+            { command: '/login', aliases: [], args: '<用户名> <密码>', description: '登录账号' },
+            { command: '/register', aliases: [], args: '<用户名> <密码>', description: '注册新账号' },
+        ]
+    },
+    {
+        name: '用户',
+        icon: '👥',
+        commands: [
+            { command: '/who', aliases: ['/w'], description: '查看在线用户' },
+            { command: '/users', aliases: [], description: '获取用户列表' },
+            { command: '/stats', aliases: ['/s'], args: '[用户名]', description: '查看消息统计' },
+        ]
+    },
+    {
+        name: '群组',
+        icon: '💬',
+        commands: [
+            { command: '/create', aliases: [], args: '<群组名>', description: '创建群组' },
+            { command: '/join', aliases: ['/j'], args: '<群组ID>', description: '加入群组' },
+            { command: '/leave', aliases: [], args: '<群组ID>', description: '离开群组' },
+            { command: '/list', aliases: ['/l'], description: '列出所有群组' },
+            { command: '/members', aliases: [], args: '<群组ID>', description: '查看群组成员' },
+            { command: '/groups', aliases: [], description: '列出所有群组（同 /list）' },
+        ]
+    },
+    {
+        name: '消息',
+        icon: '✉️',
+        commands: [
+            { command: '/send', aliases: [], args: '<群组ID> <消息>', description: '发送消息到指定群组' },
+            { command: '/history', aliases: [], args: '<群组ID> [条数]', description: '查看历史消息' },
+            { command: '/highlight', aliases: ['/hl'], args: '<消息ID>', description: '高亮消息' },
+            { command: '/pin', aliases: [], args: '<消息ID>', description: '置顶消息' },
+            { command: '/unpin', aliases: [], args: '<消息ID>', description: '取消置顶' },
+            { command: '/react', aliases: ['/r'], args: '<消息ID> [表情]', description: '添加反应（默认👍）' },
+            { command: '/recall', aliases: [], args: '<消息ID>', description: '撤回消息' },
+        ]
+    },
+    {
+        name: '提及',
+        icon: '📣',
+        commands: [
+            { command: '/mention', aliases: ['/m'], args: '[数量]', description: '查看提及我的消息' },
+            { command: '/mention', aliases: [], args: 'read <序号>', description: '标记单条已读（用序号）' },
+            { command: '/mention', aliases: [], args: 'read --all', description: '全部标记已读' },
+            { command: '/mention', aliases: [], args: 'clear [--all]', description: '清空已读提及' },
+            { command: '/mention', aliases: [], args: 'delete <序号>', description: '删除单条提及（用序号）' },
+        ]
+    },
+    {
+        name: '订阅',
+        icon: '🔔',
+        commands: [
+            { command: '/subscribe', aliases: ['/sub'], args: 'keyword <词>', description: '订阅关键词' },
+            { command: '/subscribe', aliases: [], args: 'topic <话题>', description: '订阅话题' },
+            { command: '/subscribe', aliases: [], args: 'user <用户名>', description: '订阅用户' },
+            { command: '/unsubscribe', aliases: ['/unsub'], args: '<类型> <值>', description: '取消订阅' },
+            { command: '/subscriptions', aliases: [], description: '查看我的订阅' },
+        ]
+    },
+    {
+        name: '表情',
+        icon: '😊',
+        commands: [
+            { command: ':emoji:', aliases: [], args: '<表情名>', description: '使用表情（如 :thumbsup:）' },
+            { command: '/emoji', aliases: ['/e'], args: 'add <名> <表情>', description: '添加自定义表情' },
+        ]
+    },
+    {
+        name: '本地',
+        icon: '🖥️',
+        commands: [
+            { command: '/clear', aliases: ['/cls', '@clear', '@cls'], description: '清空屏幕' },
+            { command: '/exit', aliases: ['/quit'], description: '退出程序' },
+        ]
+    },
+    {
+        name: '帮助',
+        icon: '📖',
+        commands: [
+            { command: '/help', aliases: ['/h', '/?'], description: '显示帮助信息' },
+        ]
+    }
 ];
+// 所有命令列表（用于补全）- 从 COMMAND_DEFINITIONS 动态生成
+exports.ALL_COMMANDS = (() => {
+    const commands = [];
+    exports.COMMAND_DEFINITIONS.forEach(category => {
+        category.commands.forEach(cmd => {
+            commands.push(cmd.command);
+            cmd.aliases.forEach(alias => {
+                if (!commands.includes(alias)) {
+                    commands.push(alias);
+                }
+            });
+        });
+    });
+    return [...new Set(commands)];
+})();
 // 默认表情映射
 const DEFAULT_EMOJI_MAP = {
     'thumbsup': '👍',
@@ -151,9 +235,14 @@ class CommandParser {
      */
     getCommandCompletions(partial) {
         const cmd = partial.startsWith('/') ? partial.substring(1).toLowerCase() : partial.toLowerCase();
+        // 如果没有输入前缀，只返回基础命令
+        if (!partial) {
+            return exports.ALL_COMMANDS.filter(c => !c.includes(' '));
+        }
+        // 匹配以输入开头的命令
         return exports.ALL_COMMANDS.filter(cmdName => {
-            const name = cmdName.startsWith('/') ? cmdName.substring(1) : cmdName;
-            return name.startsWith(cmd) || partial.startsWith('/');
+            const name = cmdName.startsWith('/') ? cmdName.substring(1).toLowerCase() : cmdName.toLowerCase();
+            return name.startsWith(cmd);
         });
     }
     /**

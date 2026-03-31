@@ -10,7 +10,7 @@ jest.mock('../src/config', () => ({
   config: {
     jwt: { secret: 'test-secret-key-at-least-32-chars', expiresIn: '7d' },
     cors: { allowedOrigins: ['http://localhost:14070'] },
-    mqtt: { port: 1883, websocketPort: 8883 },
+    mqtt: { port: 14080, websocketPort: 14083 },
     http: { port: 3000 },
     database: { path: ':memory:' }
   }

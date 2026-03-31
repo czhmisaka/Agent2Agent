@@ -24,6 +24,18 @@ export interface ParsedCommand {
     command: string;
     args: string[];
 }
+export interface CommandCategory {
+    name: string;
+    icon: string;
+    commands: CommandDefinition[];
+}
+export interface CommandDefinition {
+    command: string;
+    aliases: string[];
+    args?: string;
+    description: string;
+}
+export declare const COMMAND_DEFINITIONS: CommandCategory[];
 export declare const ALL_COMMANDS: string[];
 export declare class CommandParser {
     /**

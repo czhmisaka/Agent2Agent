@@ -2,25 +2,70 @@
 
 ## 📡 主题层级结构
 
+### 基础主题（v1.0）
+
 ```
 chat/
 ├── auth/
-│   ├── login      # 用户登录
-│   └── register   # 用户注册
+│   ├── login              # 用户登录
+│   ├── register           # 用户注册
+│   └── {action}/response  # 认证响应
 ├── group/
 │   └── {groupId}/
-│       ├── join       # 加入群组
-│       ├── leave      # 离开群组
-│       ├── members    # 获取成员列表
-│       └── message    # 群组消息
+│       ├── join           # 加入群组
+│       ├── leave          # 离开群组
+│       ├── members        # 获取成员列表
+│       ├── message        # 群组消息
+│       └── action         # 消息动作（反应、高亮、置顶等）
 ├── user/
 │   └── {userId}/
-│       └── private    # 私聊消息
+│       ├── private        # 私聊消息
+│       ├── mention        # 提及通知
+│       └── subscription   # 订阅匹配通知
 ├── presence/
-│   └── {userId}       # 在线状态
+│   └── {userId}          # 在线状态
+│       └── online         # 在线用户列表广播
+├── peer/
+│   └── {peerId}/
+│       ├── action         # P2P 动作
+│       ├── ack            # 动作确认
+│       └── typing         # 打字状态
 └── system/
-    └── announce       # 系统公告
+    └── announce           # 系统公告
 ```
+
+### 扩展主题（v2.0+）
+
+```
+chat/
+├── group/
+│   └── {groupId}/
+│       └── action/
+│           └── response   # 动作处理结果
+└── presence/
+    └── online            # 在线用户列表
+```
+
+### 动作类型（action 主题）
+
+| action | 说明 | 参数 |
+|--------|------|------|
+| `reaction` | 消息反应 | `messageId`, `emoji` |
+| `highlight` | 高亮消息 | `messageId` |
+| `pin` | 置顶消息 | `messageId` |
+| `unpin` | 取消置顶 | `messageId` |
+| `recall` | 撤回消息 | `messageId` |
+| `subscribe` | 订阅关键词 | `target`, `value` |
+| `emoji_add` | 添加自定义表情 | `target`, `value` |
+| `unsubscribe` | 取消订阅 | `target` |
+
+### 订阅类型
+
+| subscription_type | 说明 | 示例 |
+|------------------|------|------|
+| `keyword` | 关键词订阅 | `react` → 收到包含"react"的消息时通知 |
+| `topic` | 话题订阅 | `技术` → 收到 #技术 时通知 |
+| `user` | 用户订阅 | `alice` → 收到 @alice 时通知 |
 
 ## 🔄 消息流程
 

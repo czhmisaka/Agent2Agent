@@ -45,7 +45,6 @@ const broker_1 = require("../mqtt/broker");
 const uuid_1 = require("uuid");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
@@ -94,33 +93,6 @@ exports.app.use((0, cookie_parser_1.default)()); // 解析 cookies
 exports.app.use(utils_1.httpLogger);
 // ============ 静态文件服务 ============
 exports.app.use(express_1.default.static(path.join(__dirname, '../../public')));
-// ============ 速率限制 ============
-// API 通用速率限制
-const apiLimiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15分钟
-    max: 100, // 最多100次请求
-    message: { error: 'Too many requests, please try again later', code: 'RATE_LIMIT_EXCEEDED' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-// 登录速率限制（更严格）
-const loginLimiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000, // 15分钟
-    max: 5, // 最多5次登录尝试
-    message: { error: 'Too many login attempts, please try again later', code: 'LOGIN_RATE_LIMIT' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-// 注册速率限制
-const registerLimiter = (0, express_rate_limit_1.default)({
-    windowMs: 60 * 60 * 1000, // 1小时
-    max: 10, // 最多10次注册尝试
-    message: { error: 'Too many registration attempts, please try again later', code: 'REGISTER_RATE_LIMIT' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-// 应用速率限制
-exports.app.use('/api/', apiLimiter);
 /**
  * 验证用户名
  * - 长度: 3-20个字符
@@ -720,10 +692,11 @@ exports.app.post('/api/groups/:groupId/messages', authMiddleware, async (req, re
       INSERT INTO messages (id, group_id, sender_id, content, created_at)
       VALUES (?, ?, ?, ?, ?)
     `).run(messageId, groupId, userId, sanitizedContent, new Date().toISOString());
-        // TODO: 提及和订阅功能需要进一步完善类型处理
-        // const senderId = String(userId);
-        // processHttpMentions(db, messageId, senderId, groupId, sanitizedContent);
-        // processHttpSubscriptions(db, messageId, senderId, groupId, sanitizedContent);
+        // 处理提及和订阅功能
+        const senderId = String(userId);
+        const groupIdStr = String(groupId);
+        processHttpMentions(db, messageId, senderId, groupIdStr, sanitizedContent);
+        processHttpSubscriptions(db, messageId, senderId, groupIdStr, sanitizedContent);
         res.json({
             success: true,
             messageId,
@@ -970,6 +943,143 @@ exports.app.put('/api/mentions/read-all', authMiddleware, (req, res) => {
     catch (error) {
         console.error('Mark all mentions as read error:', error);
         res.status(500).json({ error: 'Failed to mark all mentions as read' });
+    }
+});
+// ============ 订阅相关 API ============
+// 获取用户的订阅列表
+exports.app.get('/api/subscriptions', authMiddleware, (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { userId } = req.user;
+    const groupId = req.query.groupId;
+    try {
+        let query = `
+      SELECT s.*, g.name as group_name
+      FROM subscriptions s
+      LEFT JOIN groups g ON s.group_id = g.id
+      WHERE s.user_id = ? AND s.is_active = 1
+    `;
+        const params = [userId];
+        if (groupId) {
+            query += ' AND (s.group_id IS NULL OR s.group_id = ?)';
+            params.push(groupId);
+        }
+        query += ' ORDER BY s.created_at DESC';
+        const subscriptions = db.prepare(query).all(...params);
+        res.json(subscriptions.map((sub) => ({
+            id: sub.id,
+            userId: sub.user_id,
+            type: sub.subscription_type,
+            value: sub.subscription_value,
+            groupId: sub.group_id,
+            groupName: sub.group_name,
+            isActive: Boolean(sub.is_active),
+            createdAt: sub.created_at
+        })));
+    }
+    catch (error) {
+        console.error('Get subscriptions error:', error);
+        res.status(500).json({ error: 'Failed to get subscriptions' });
+    }
+});
+// ============ 统计相关 API ============
+// 获取用户统计信息
+exports.app.get('/api/stats', authMiddleware, (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { userId } = req.user;
+    const targetUserId = req.query.userId || userId;
+    try {
+        // 获取发送的消息总数
+        const totalMessagesResult = db.prepare(`
+      SELECT COUNT(*) as count FROM messages WHERE sender_id = ? AND is_deleted = 0 AND is_recalled = 0
+    `).get(targetUserId);
+        // 获取发送的总词数
+        const wordCountResult = db.prepare(`
+      SELECT SUM(LENGTH(content) - LENGTH(REPLACE(content, ' ', '')) + 1) as count 
+      FROM messages 
+      WHERE sender_id = ? AND is_deleted = 0 AND is_recalled = 0
+    `).get(targetUserId);
+        // 获取被提及次数
+        const mentionsResult = db.prepare(`
+      SELECT COUNT(*) as count FROM message_mentions WHERE mentioned_user_id = ?
+    `).get(targetUserId);
+        // 获取收到的反应数
+        const reactionsResult = db.prepare(`
+      SELECT COUNT(*) as count FROM message_reactions mr
+      JOIN messages m ON mr.message_id = m.id
+      WHERE m.sender_id = ?
+    `).get(targetUserId);
+        // 获取加入的群组数
+        const groupsJoinedResult = db.prepare(`
+      SELECT COUNT(*) as count FROM group_members WHERE user_id = ?
+    `).get(targetUserId);
+        // 获取收到的消息数（不是自己发的）
+        const messagesReceivedResult = db.prepare(`
+      SELECT COUNT(*) as count FROM messages 
+      WHERE group_id IN (SELECT group_id FROM group_members WHERE user_id = ?)
+      AND sender_id != ? AND is_deleted = 0 AND is_recalled = 0
+    `).get(targetUserId, targetUserId);
+        res.json({
+            totalMessages: totalMessagesResult?.count || 0,
+            totalWords: wordCountResult?.count || 0,
+            mentions: mentionsResult?.count || 0,
+            reactions: reactionsResult?.count || 0,
+            groupsJoined: groupsJoinedResult?.count || 0,
+            messagesReceived: messagesReceivedResult?.count || 0
+        });
+    }
+    catch (error) {
+        console.error('Get stats error:', error);
+        res.status(500).json({ error: 'Failed to get stats' });
+    }
+});
+// 获取指定用户的统计信息
+exports.app.get('/api/stats/:targetUserId', authMiddleware, (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { userId } = req.user;
+    const { targetUserId } = req.params;
+    try {
+        // 获取发送的消息总数
+        const totalMessagesResult = db.prepare(`
+      SELECT COUNT(*) as count FROM messages WHERE sender_id = ? AND is_deleted = 0 AND is_recalled = 0
+    `).get(targetUserId);
+        // 获取发送的总词数
+        const wordCountResult = db.prepare(`
+      SELECT SUM(LENGTH(content) - LENGTH(REPLACE(content, ' ', '')) + 1) as count 
+      FROM messages 
+      WHERE sender_id = ? AND is_deleted = 0 AND is_recalled = 0
+    `).get(targetUserId);
+        // 获取被提及次数
+        const mentionsResult = db.prepare(`
+      SELECT COUNT(*) as count FROM message_mentions WHERE mentioned_user_id = ?
+    `).get(targetUserId);
+        // 获取收到的反应数
+        const reactionsResult = db.prepare(`
+      SELECT COUNT(*) as count FROM message_reactions mr
+      JOIN messages m ON mr.message_id = m.id
+      WHERE m.sender_id = ?
+    `).get(targetUserId);
+        // 获取加入的群组数
+        const groupsJoinedResult = db.prepare(`
+      SELECT COUNT(*) as count FROM group_members WHERE user_id = ?
+    `).get(targetUserId);
+        // 获取收到的消息数（不是自己发的）
+        const messagesReceivedResult = db.prepare(`
+      SELECT COUNT(*) as count FROM messages 
+      WHERE group_id IN (SELECT group_id FROM group_members WHERE user_id = ?)
+      AND sender_id != ? AND is_deleted = 0 AND is_recalled = 0
+    `).get(targetUserId, targetUserId);
+        res.json({
+            totalMessages: totalMessagesResult?.count || 0,
+            totalWords: wordCountResult?.count || 0,
+            mentions: mentionsResult?.count || 0,
+            reactions: reactionsResult?.count || 0,
+            groupsJoined: groupsJoinedResult?.count || 0,
+            messagesReceived: messagesReceivedResult?.count || 0
+        });
+    }
+    catch (error) {
+        console.error('Get stats error:', error);
+        res.status(500).json({ error: 'Failed to get stats' });
     }
 });
 // ============ 消息相关 API ============

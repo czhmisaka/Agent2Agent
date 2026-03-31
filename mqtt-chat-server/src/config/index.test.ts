@@ -27,13 +27,13 @@ describe('Config', () => {
     it('should use default MQTT port', () => {
       delete process.env.MQTT_PORT;
       const { config } = require('./index');
-      expect(config.mqtt.port).toBe(14083);
+      expect(config.mqtt.port).toBe(14080);
     });
 
     it('should use default MQTT websocket port', () => {
       delete process.env.MQTT_WS_PORT;
       const { config } = require('./index');
-      expect(config.mqtt.websocketPort).toBe(14084);
+      expect(config.mqtt.websocketPort).toBe(14083);
     });
 
     it('should use default HTTP port', () => {
