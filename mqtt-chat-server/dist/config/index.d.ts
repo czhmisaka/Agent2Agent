@@ -1,3 +1,4 @@
+export declare const generateSecretKey: (length?: number) => string;
 export declare const config: {
     mqtt: {
         port: number;
@@ -12,6 +13,9 @@ export declare const config: {
     jwt: {
         secret: string;
         expiresIn: string;
+    };
+    cors: {
+        allowedOrigins: string[];
     };
 };
 //# sourceMappingURL=index.d.ts.map

@@ -15,7 +15,7 @@ NC='\033[0m'
 # 配置
 SERVER_URL="http://localhost:14050"
 MQTT_TCP_PORT=1883
-MQTT_WS_PORT=8883
+MQTT_WS_PORT=14083
 TEST_USER="testuser_$(date +%s)"
 TEST_PASS="TestPass123"
 TEST_GROUP="TestGroup_$(date +%s)"

@@ -4,6 +4,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
+import inquirer from 'inquirer';
 
 export interface ParsedMessage {
   content: string;
@@ -52,7 +53,10 @@ const SYSTEM_COMMANDS = [
   'react', 'r',
   'recall',
   'mention', 'm',
-  'rules', 'rule', 'r'
+  'rules', 'rule',
+  'join', 'j',
+  'leave', 'create', 'groups', 'members', 'history', 'users',
+  'login', 'register', 'send', 'exit', 'quit', 'clear'
 ];
 
 // 动作指令（发送到服务端）
@@ -62,6 +66,28 @@ const ACTION_COMMANDS = [
   'unpin',
   'react',
   'recall'
+];
+
+// 所有命令列表（用于补全）
+export const ALL_COMMANDS = [
+  // 基础指令
+  '/help', '/login', '/register', '/who', '/list', '/exit', '/quit',
+  // 群组指令
+  '/join', '/leave', '/create', '/groups', '/members', '/send', '/history', '/users',
+  // 消息操作
+  '/highlight', '/pin', '/unpin', '/react', '/recall',
+  // 提及功能
+  '/mention',
+  // 订阅功能
+  '/subscribe', '/subscriptions', '/unsubscribe',
+  // 表情功能
+  '/emoji',
+  // 统计功能
+  '/stats',
+  // 本地指令
+  '/clear',
+  // 别名
+  '/h', '/?', '/w', '/l', '/s', '/sub', '/unsub', '/e', '/hl', '/r', '/m'
 ];
 
 // 默认表情映射
@@ -85,10 +111,160 @@ const DEFAULT_EMOJI_MAP: Record<string, string> = {
   'ok': '👌'
 };
 
+// 表情名称列表（用于补全）
+const EMOJI_NAMES = Object.keys(DEFAULT_EMOJI_MAP);
+
+// 在线用户列表
+let onlineUsers: Array<{ userId: string; username: string }> = [];
+
+// 群组列表
+let joinedGroups: string[] = [];
+
 // ==================== 解析器类 ====================
 
 export class CommandParser {
   
+  /**
+   * 设置在线用户列表
+   */
+  setOnlineUsers(users: Array<{ userId: string; username: string }>): void {
+    onlineUsers = users;
+  }
+
+  /**
+   * 获取在线用户列表
+   */
+  getOnlineUsers(): Array<{ userId: string; username: string }> {
+    return onlineUsers;
+  }
+
+  /**
+   * 设置已加入的群组列表
+   */
+  setJoinedGroups(groups: string[]): void {
+    joinedGroups = groups;
+  }
+
+  /**
+   * 获取已加入的群组列表
+   */
+  getJoinedGroups(): string[] {
+    return joinedGroups;
+  }
+
+  /**
+   * Tab 补全触发检测
+   * 返回需要触发的补全类型
+   */
+  detectCompletionTrigger(line: string): 'command' | 'mention' | 'emoji' | 'group' | 'subscribe' | 'none' {
+    // 空输入，提示所有命令
+    if (!line) {
+      return 'command';
+    }
+
+    // 以 / 开头，补全命令
+    if (line.startsWith('/')) {
+      // 检查是否是 /subscribe 后的补全
+      const parts = line.split(/\s+/);
+      if (parts[0] === '/subscribe' || parts[0] === '/sub') {
+        if (parts.length === 1) {
+          return 'subscribe';
+        }
+      }
+      return 'command';
+    }
+
+    // 以 @ 开头，补全用户名
+    if (line.startsWith('@')) {
+      return 'mention';
+    }
+
+    // 以 : 开头，补全表情
+    if (line.startsWith(':')) {
+      return 'emoji';
+    }
+
+    return 'none';
+  }
+
+  /**
+   * 获取命令补全列表
+   */
+  getCommandCompletions(partial: string): string[] {
+    const cmd = partial.startsWith('/') ? partial.substring(1).toLowerCase() : partial.toLowerCase();
+    
+    return ALL_COMMANDS.filter(cmdName => {
+      const name = cmdName.startsWith('/') ? cmdName.substring(1) : cmdName;
+      return name.startsWith(cmd) || partial.startsWith('/');
+    });
+  }
+
+  /**
+   * 获取表情补全列表
+   */
+  getEmojiCompletions(partial: string): string[] {
+    const emojiName = partial.startsWith(':') ? partial.substring(1).toLowerCase() : partial.toLowerCase();
+    
+    return EMOJI_NAMES
+      .filter(name => name.startsWith(emojiName))
+      .map(name => `:${name}:`);
+  }
+
+  /**
+   * 获取群组补全列表
+   */
+  getGroupCompletions(partial: string): string[] {
+    return joinedGroups.filter(group => group.startsWith(partial));
+  }
+
+  /**
+   * 获取订阅类型补全列表
+   */
+  getSubscribeCompletions(): string[] {
+    return ['keyword', 'topic', 'user'];
+  }
+
+  /**
+   * 交互式选择在线用户
+   */
+  async selectUser(searchTerm: string = ''): Promise<string | null> {
+    // 过滤匹配的用户
+    const filteredUsers = searchTerm 
+      ? onlineUsers.filter(u => 
+          u.username.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      : onlineUsers;
+
+    if (filteredUsers.length === 0) {
+      console.log('没有找到匹配的用户');
+      return null;
+    }
+
+    // 如果只有一个匹配，直接返回
+    if (filteredUsers.length === 1) {
+      return filteredUsers[0].username;
+    }
+
+    // 使用 inquirer 进行交互式选择
+    const choices = filteredUsers.map(user => ({
+      name: `${user.username} (${user.userId.substring(0, 8)}...)`,
+      value: user.username,
+      short: user.username
+    }));
+
+    const answer = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'user',
+        message: `选择用户${searchTerm ? ` (搜索: ${searchTerm})` : ''}:`,
+        choices: choices,
+        pageSize: Math.min(10, choices.length)
+      }
+    ]);
+
+    return answer.user;
+  }
+
   /**
    * 主解析方法
    * 解析用户输入，提取所有信息
@@ -218,10 +394,6 @@ export class CommandParser {
       result = result.replace(regex, emoji);
     }
     
-    // 移除未匹配的表情标签（保留原样让服务器处理）
-    // 如果要移除不存在的表情，使用下面这行：
-    // result = result.replace(/:([\w]+):(?![\u4e00-\u9fa5])/g, ':$1:');
-    
     return result;
   }
 
@@ -292,7 +464,8 @@ export class CommandParser {
       'e': 'emoji',
       'hl': 'highlight',
       'r': 'react',
-      'm': 'mention'
+      'm': 'mention',
+      'j': 'join'
     };
     
     return aliasMap[lower] !== undefined;
@@ -506,7 +679,7 @@ export class CommandParser {
 💡 提示：
   - 使用 Tab 键自动补全
   - 使用 ↑↓ 键查看历史
-  - 使用 @ 自动补全用户名
+  - 使用 @ 触发用户选择器
   - 使用 : 自动补全表情
 `;
   }

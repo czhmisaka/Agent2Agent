@@ -112,8 +112,8 @@ docker-compose logs -f mqtt-chat-server
 | 端口 | 服务 | 协议 |
 |------|------|------|
 | 3000 | HTTP API | HTTP/REST |
-| 1883 | MQTT Broker | TCP |
-| 8883 | MQTT WebSocket | WebSocket |
+| 14080 | MQTT Broker | TCP |
+| 14083 | MQTT WebSocket | WebSocket |
 
 ### 4. 停止服务
 
@@ -188,7 +188,7 @@ npm start
 
 ```bash
 # 检查健康状态
-curl http://localhost:3000/health
+curl http://localhost:14070/health
 
 # 应该返回
 {"status":"ok","timestamp":"2026-03-26T..."}
@@ -206,8 +206,8 @@ curl http://localhost:3000/health
 # 服务器配置
 NODE_ENV=production
 HTTP_PORT=3000
-MQTT_PORT=1883
-MQTT_WS_PORT=8883
+MQTT_PORT=14080
+MQTT_WS_PORT=14083
 
 # JWT 配置（必须修改！）
 JWT_SECRET=your-very-long-and-secure-secret-key-at-least-32-chars
@@ -248,7 +248,7 @@ server {
 
     # HTTP API
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:14070;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -259,7 +259,7 @@ server {
 
     # WebSocket
     location /mqtt {
-        proxy_pass http://localhost:8883;
+        proxy_pass http://localhost:14083;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -325,13 +325,13 @@ chmod +x scripts/test.sh
 #### 健康检查
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:14070/health
 ```
 
 #### 用户注册
 
 ```bash
-curl -X POST http://localhost:3000/api/users/register \
+curl -X POST http://localhost:14070/api/users/register \
   -H "Content-Type: application/json" \
   -d '{"username":"testuser","password":"TestPass123"}'
 ```
@@ -339,7 +339,7 @@ curl -X POST http://localhost:3000/api/users/register \
 #### 用户登录
 
 ```bash
-curl -X POST http://localhost:3000/api/users/login \
+curl -X POST http://localhost:14070/api/users/login \
   -H "Content-Type: application/json" \
   -d '{"username":"testuser","password":"TestPass123"}'
 ```
@@ -350,10 +350,10 @@ curl -X POST http://localhost:3000/api/users/login \
 
 ```bash
 # 订阅主题
-mosquitto_sub -h localhost -p 1883 -t "chat/#" -v
+mosquitto_sub -h localhost -p 14080 -t "chat/#" -v
 
 # 发布消息（需要先获取有效 token）
-mosquitto_pub -h localhost -p 1883 -t "chat/auth/login" -m '{
+mosquitto_pub -h localhost -p 14080 -t "chat/auth/login" -m '{
   "type": "login",
   "payload": {"username": "testuser", "password": "TestPass123"}
 }'
@@ -369,7 +369,7 @@ mosquitto_pub -h localhost -p 1883 -t "chat/auth/login" -m '{
 # Linux: cargo install websocat
 
 # 连接到 MQTT over WebSocket
-websocat "ws://localhost:8883"
+websocat "ws://localhost:14083"
 ```
 
 ---
@@ -396,9 +396,9 @@ docker-compose build --no-cache
 **解决方案**:
 ```bash
 # 查找占用端口的进程
-lsof -i :3000
-lsof -i :1883
-lsof -i :8883
+lsof -i :14070
+lsof -i :14080
+lsof -i :14083
 
 # 杀掉进程或更改端口
 # 编辑 .env 文件修改端口
@@ -438,8 +438,8 @@ echo "JWT_SECRET=your-very-long-secret-key-at-least-32-chars" >> .env
 **解决方案**:
 ```bash
 # 检查 MQTT 端口是否开放
-nc -zv localhost 1883
-nc -zv localhost 8883
+nc -zv localhost 14080
+nc -zv localhost 14083
 
 # 检查 Docker 网络
 docker network ls

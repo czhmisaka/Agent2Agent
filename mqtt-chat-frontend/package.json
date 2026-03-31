@@ -1,0 +1,23 @@
+{
+  "name": "mqtt-chat-frontend",
+  "version": "1.0.0",
+  "description": "MQTT Chat Frontend - Vue 3 + Vite Web Client",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "pinia": "^2.1.7",
+    "mqtt": "^5.10.3",
+    "axios": "^1.7.9"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0",
+    "vue-tsc": "^2.0.0"
+  }
+}

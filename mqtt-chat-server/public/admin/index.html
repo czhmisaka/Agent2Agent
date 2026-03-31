@@ -376,11 +376,11 @@
             <h2>Admin Login</h2>
             <div class="form-group">
                 <label for="loginUsername">Username</label>
-                <input type="text" id="loginUsername" placeholder="Enter username">
+                <input type="text" id="loginUsername" placeholder="Enter username" value="admin">
             </div>
             <div class="form-group">
                 <label for="loginPassword">Password</label>
-                <input type="password" id="loginPassword" placeholder="Enter password">
+                <input type="password" id="loginPassword" placeholder="Enter password" value="Admin@123">
             </div>
             <button class="login-btn" onclick="login()">Login</button>
             <div id="loginError" class="login-error"></div>
@@ -474,17 +474,14 @@
         let allMessages = [];
         let adminUsername = null;
 
-        // 从 cookie 中读取 auth_token
-        function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-            return null;
+        // 从 localStorage 读取 token
+        function getToken() {
+            return localStorage.getItem('auth_token');
         }
 
-        // 检查是否已认证（通过 cookie）
+        // 检查是否已认证（通过 localStorage）
         function isAuthenticated() {
-            return !!getCookie('auth_token');
+            return !!getToken();
         }
 
         function updateAuthUI() {
@@ -516,7 +513,7 @@
                 const response = await fetch(`${API_BASE}/api/users/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include', // 发送 httpOnly cookie
+                    credentials: 'include', // 同时发送 cookie 作为备份
                     body: JSON.stringify({ username, password })
                 });
 
@@ -527,7 +524,12 @@
                     return;
                 }
 
-                // 存储用户名（token 现在通过 httpOnly cookie 自动管理）
+                // 存储 token 到 localStorage（主要认证方式）
+                if (data.token) {
+                    localStorage.setItem('auth_token', data.token);
+                }
+                
+                // 存储用户名
                 adminUsername = data.username;
 
                 errorEl.textContent = '';
@@ -544,19 +546,22 @@
 
         function logout() {
             adminUsername = null;
-            // 清除 auth_token cookie
-            document.cookie = 'auth_token=; Max-Age=0';
+            // 清除 localStorage 中的 token
+            localStorage.removeItem('auth_token');
             updateAuthUI();
         }
 
         async function fetchAPI(endpoint, options = {}) {
             try {
+                const token = getToken();
+                
                 const response = await fetch(`${API_BASE}${endpoint}`, {
                     headers: {
                         'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
                         ...options.headers
                     },
-                    credentials: 'include', // 自动发送 httpOnly cookie
+                    credentials: 'include', // 同时发送 cookie 作为备份
                     ...options
                 });
 
@@ -574,7 +579,7 @@
         }
 
         async function loadStats() {
-            const [users, groups, allMessages] = await Promise.all([
+            const [users, groups, allMessagesData] = await Promise.all([
                 fetchAPI('/api/admin/users'),
                 fetchAPI('/api/admin/groups'),
                 fetchAPI('/api/admin/messages')
@@ -582,7 +587,7 @@
             
             document.getElementById('totalUsers').textContent = Array.isArray(users) ? users.length : 0;
             document.getElementById('totalGroups').textContent = Array.isArray(groups) ? groups.length : 0;
-            document.getElementById('totalMessages').textContent = Array.isArray(allMessages) ? allMessages.length : 0;
+            document.getElementById('totalMessages').textContent = Array.isArray(allMessagesData) ? allMessagesData.length : 0;
             
             // Count topics
             const topics = new Set();
@@ -679,7 +684,7 @@
             
             allMessages = [];
             
-            // Get all groups from admin API (no auth required)
+            // Get all groups from admin API
             const groups = await fetchAPI('/api/admin/groups');
             
             if (!groups || !Array.isArray(groups)) {
@@ -687,9 +692,8 @@
                 return;
             }
             
-            // Fetch messages from all groups (public API)
+            // Fetch messages from all groups
             for (const group of groups.slice(0, 10)) {
-                // Try to fetch messages, but don't fail if auth is required
                 try {
                     const messagesResponse = await fetch(`${API_BASE}/api/admin/messages`);
                     if (messagesResponse.ok) {
@@ -787,12 +791,33 @@
         
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('Admin Dashboard loaded');
+            
+            // Debug: 打印 token 状态
+            const token = getToken();
+            console.log('Auth token from localStorage:', token ? 'Found' : 'Not found');
+            
             updateAuthUI();
+            
+            // Handle Enter key on login form
+            const loginPasswordInput = document.getElementById('loginPassword');
+            if (loginPasswordInput) {
+                loginPasswordInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        console.log('Enter key pressed on login');
+                        login();
+                    }
+                });
+            }
+            
             if (isAuthenticated()) {
+                console.log('User already authenticated');
                 loadStats();
                 loadTopics();
                 loadUsers();
                 loadMessages();
+            } else {
+                console.log('User not authenticated, showing login form');
             }
 
             // Auto refresh every 30 seconds
@@ -803,13 +828,6 @@
                     loadUsers();
                 }
             }, 30000);
-        });
-
-        // Handle Enter key on login form
-        document.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('loginPassword').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') login();
-            });
         });
     </script>
 </body>

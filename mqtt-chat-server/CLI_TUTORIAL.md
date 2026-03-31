@@ -5,8 +5,8 @@
 ### 📊 服务状态
 ```
 HTTP API: http://localhost:14050 ✅
-MQTT TCP: localhost:1883 ✅
-WebSocket: localhost:8883 ✅
+MQTT TCP: localhost:14080 ✅
+WebSocket: localhost:14083 ✅
 ```
 
 ## 🚀 使用方法
@@ -124,7 +124,7 @@ http://localhost:14050/admin/index.html
 Alice (CLI) 
     ↓ MQTT Publish
     ↓
-MQTT Broker (1883)
+MQTT Broker (14080)
     ↓
 Bob (CLI) ← 实时接收
     ↓

@@ -36,6 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.app = void 0;
 exports.startHttpServer = startHttpServer;
 const express_1 = __importDefault(require("express"));
 const config_1 = require("../config");
@@ -47,6 +48,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const utils_1 = require("../utils");
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
@@ -55,20 +57,43 @@ const logsDir = path.join(process.cwd(), 'logs');
 if (!fs.existsSync(logsDir)) {
     fs.mkdirSync(logsDir, { recursive: true });
 }
-const app = (0, express_1.default)();
-// 安全中间件
-app.use((0, helmet_1.default)()); // 安全头部
-app.use((0, cors_1.default)({
-    origin: process.env.CORS_ORIGIN || '*',
+exports.app = (0, express_1.default)();
+// 安全中间件 - 允许内联脚本和本地资源
+exports.app.use((0, helmet_1.default)({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+            scriptSrcAttr: ["'unsafe-inline'"],
+            connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
+            imgSrc: ["'self'", "data:", "https:"],
+            fontSrc: ["'self'", "data:"],
+            frameSrc: ["'none'"]
+        }
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+})); // 安全头部
+// CORS 配置：生产环境禁止使用 '*'
+const corsOptions = {
+    origin: config_1.config.cors.allowedOrigins.length > 0
+        ? config_1.config.cors.allowedOrigins
+        : (process.env.NODE_ENV === 'production'
+            ? [] // 生产环境无配置时拒绝所有跨域请求
+            : ['http://localhost:14070', 'http://localhost:8080']), // 开发环境默认允许本地
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
-}));
-app.use(express_1.default.json({ limit: '10kb' })); // 限制请求体大小
-app.use(express_1.default.urlencoded({ extended: true, limit: '10kb' }));
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+};
+exports.app.use((0, cors_1.default)(corsOptions));
+exports.app.use(express_1.default.json({ limit: '10kb' })); // 限制请求体大小
+exports.app.use(express_1.default.urlencoded({ extended: true, limit: '10kb' }));
+exports.app.use((0, cookie_parser_1.default)()); // 解析 cookies
 // HTTP 请求日志
-app.use(utils_1.httpLogger);
+exports.app.use(utils_1.httpLogger);
 // ============ 静态文件服务 ============
-app.use(express_1.default.static(path.join(__dirname, '../../public')));
+exports.app.use(express_1.default.static(path.join(__dirname, '../../public')));
 // ============ 速率限制 ============
 // API 通用速率限制
 const apiLimiter = (0, express_rate_limit_1.default)({
@@ -95,7 +120,7 @@ const registerLimiter = (0, express_rate_limit_1.default)({
     legacyHeaders: false,
 });
 // 应用速率限制
-app.use('/api/', apiLimiter);
+exports.app.use('/api/', apiLimiter);
 /**
  * 验证用户名
  * - 长度: 3-20个字符
@@ -167,20 +192,27 @@ function sanitizeMessage(content) {
     if (!content)
         return '';
     return content
-        .replace(/</g, '<')
-        .replace(/>/g, '>')
-        .replace(/"/g, '"')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
         .replace(/'/g, '&#x27;')
-        .replace(/\//g, '&#x2F;')
         .substring(0, 5000); // 限制最大长度
 }
-// 中间件：验证 JWT token
+// 中间件：验证 JWT token（支持 cookie 和 Authorization header）
 function authMiddleware(req, res, next) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    // 优先从 cookie 获取 token
+    let token = req.cookies?.auth_token;
+    // 备选：从 Authorization header 获取
+    if (!token) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.substring(7);
+        }
+    }
+    if (!token) {
         return res.status(401).json({ error: 'No token provided' });
     }
-    const token = authHeader.substring(7);
     try {
         const decoded = jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
         // 确保 userId 是字符串类型
@@ -194,8 +226,44 @@ function authMiddleware(req, res, next) {
         return res.status(401).json({ error: 'Invalid token' });
     }
 }
+// 中间件：验证管理员权限（支持 cookie 和 Authorization header）
+function adminAuthMiddleware(req, res, next) {
+    // 优先从 cookie 获取 token
+    let token = req.cookies?.auth_token;
+    // 备选：从 Authorization header 获取
+    if (!token) {
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.substring(7);
+        }
+    }
+    if (!token) {
+        return res.status(401).json({ error: 'No token provided', code: 'NO_TOKEN' });
+    }
+    try {
+        const decoded = jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
+        const userId = String(decoded.userId);
+        // 查询用户的管理员状态
+        const db = (0, sqlite_1.getDatabase)();
+        const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(userId);
+        if (!user) {
+            return res.status(401).json({ error: 'User not found', code: 'USER_NOT_FOUND' });
+        }
+        if (!user.is_admin) {
+            return res.status(403).json({ error: 'Admin access required', code: 'ADMIN_REQUIRED' });
+        }
+        req.user = {
+            ...decoded,
+            userId
+        };
+        next();
+    }
+    catch (error) {
+        return res.status(401).json({ error: 'Invalid token', code: 'INVALID_TOKEN' });
+    }
+}
 // 健康检查
-app.get('/health', async (req, res) => {
+exports.app.get('/health', async (req, res) => {
     const health = {
         status: 'ok',
         timestamp: new Date().toISOString(),
@@ -248,9 +316,9 @@ app.get('/health', async (req, res) => {
     health.status = isHealthy ? 'ok' : 'degraded';
     res.status(isHealthy ? 200 : 503).json(health);
 });
-// ============ 管理面板 API（无需认证）============
+// ============ 管理面板 API（需要管理员权限）============
 // 获取所有消息（用于管理界面）
-app.get('/api/admin/messages', (req, res) => {
+exports.app.get('/api/admin/messages', adminAuthMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const limit = parseInt(req.query.limit) || 100;
     const offset = parseInt(req.query.offset) || 0;
@@ -274,8 +342,8 @@ app.get('/api/admin/messages', (req, res) => {
         res.status(500).json({ error: 'Failed to get messages' });
     }
 });
-// 获取所有群组（无需认证）
-app.get('/api/admin/groups', (req, res) => {
+// 获取所有群组（需要管理员权限）
+exports.app.get('/api/admin/groups', adminAuthMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     try {
         const groups = db.prepare(`
@@ -296,8 +364,8 @@ app.get('/api/admin/groups', (req, res) => {
         res.status(500).json({ error: 'Failed to get groups' });
     }
 });
-// 获取所有用户（无需认证 - 用于管理面板）
-app.get('/api/admin/users', (req, res) => {
+// 获取所有用户（需要管理员权限）
+exports.app.get('/api/admin/users', adminAuthMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     try {
         const users = db.prepare(`
@@ -314,7 +382,7 @@ app.get('/api/admin/users', (req, res) => {
 });
 // ============ 用户相关 API ============
 // 注册用户
-app.post('/api/users/register', async (req, res) => {
+exports.app.post('/api/users/register', async (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { username, password } = req.body;
     // 输入验证
@@ -346,11 +414,17 @@ app.post('/api/users/register', async (req, res) => {
       VALUES (?, ?, ?)
     `).run(userId, username, passwordHash);
         const token = jsonwebtoken_1.default.sign({ userId, username }, config_1.config.jwt.secret, { expiresIn: config_1.config.jwt.expiresIn });
+        // 设置 httpOnly cookie 防止 XSS 攻击
+        res.cookie('auth_token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 天
+        });
         res.json({
             success: true,
             userId,
-            username,
-            token
+            username
         });
     }
     catch (error) {
@@ -359,7 +433,7 @@ app.post('/api/users/register', async (req, res) => {
     }
 });
 // 登录
-app.post('/api/users/login', async (req, res) => {
+exports.app.post('/api/users/login', async (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { username, password } = req.body;
     if (!username || !password) {
@@ -377,12 +451,20 @@ app.post('/api/users/login', async (req, res) => {
         db.prepare('UPDATE users SET is_online = 1, last_login = ? WHERE id = ?')
             .run(new Date().toISOString(), user.id);
         const token = jsonwebtoken_1.default.sign({ userId: user.id, username }, config_1.config.jwt.secret, { expiresIn: config_1.config.jwt.expiresIn });
+        // 设置 httpOnly cookie 防止 XSS 攻击
+        res.cookie('auth_token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 天
+        });
+        // 同时返回 token 给客户端存储（JWT 不涉及敏感信息）
         res.json({
             success: true,
             userId: user.id,
             username: user.username,
             nickname: user.nickname,
-            token
+            token: token
         });
     }
     catch (error) {
@@ -390,8 +472,53 @@ app.post('/api/users/login', async (req, res) => {
         res.status(500).json({ error: 'Login failed' });
     }
 });
+// ============ 管理员相关 API ============
+// 设置管理员（需要 ADMIN_SETUP_SECRET，用于初始设置）
+exports.app.post('/api/admin/setup', async (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { username, setup_secret } = req.body;
+    const expectedSecret = process.env.ADMIN_SETUP_SECRET;
+    if (!expectedSecret || setup_secret !== expectedSecret) {
+        return res.status(403).json({ error: 'Invalid setup secret', code: 'INVALID_SETUP_SECRET' });
+    }
+    if (!username) {
+        return res.status(400).json({ error: 'Username is required' });
+    }
+    try {
+        const user = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found', code: 'USER_NOT_FOUND' });
+        }
+        db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(user.id);
+        res.json({ success: true, message: `${username} is now an admin` });
+    }
+    catch (error) {
+        console.error('Admin setup error:', error);
+        res.status(500).json({ error: 'Failed to set admin' });
+    }
+});
+// 提升用户为管理员（需要管理员权限）
+exports.app.post('/api/admin/users/:userId/promote', adminAuthMiddleware, (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { userId } = req.params;
+    try {
+        const user = db.prepare('SELECT id, is_admin FROM users WHERE id = ?').get(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found', code: 'USER_NOT_FOUND' });
+        }
+        if (user.is_admin) {
+            return res.status(400).json({ error: 'User is already an admin', code: 'ALREADY_ADMIN' });
+        }
+        db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(userId);
+        res.json({ success: true, message: 'User promoted to admin' });
+    }
+    catch (error) {
+        console.error('Promote admin error:', error);
+        res.status(500).json({ error: 'Failed to promote user' });
+    }
+});
 // 获取当前用户信息
-app.get('/api/users/me', authMiddleware, (req, res) => {
+exports.app.get('/api/users/me', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { userId } = req.user;
     try {
@@ -408,7 +535,7 @@ app.get('/api/users/me', authMiddleware, (req, res) => {
     }
 });
 // 获取所有用户
-app.get('/api/users', authMiddleware, (req, res) => {
+exports.app.get('/api/users', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     try {
         const users = db.prepare(`
@@ -425,7 +552,7 @@ app.get('/api/users', authMiddleware, (req, res) => {
 });
 // ============ 群组相关 API ============
 // 创建群组
-app.post('/api/groups', authMiddleware, (req, res) => {
+exports.app.post('/api/groups', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { userId } = req.user;
     const { name, description } = req.body;
@@ -457,7 +584,7 @@ app.post('/api/groups', authMiddleware, (req, res) => {
     }
 });
 // 获取用户的群组列表
-app.get('/api/groups', authMiddleware, (req, res) => {
+exports.app.get('/api/groups', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { userId } = req.user;
     try {
@@ -476,7 +603,7 @@ app.get('/api/groups', authMiddleware, (req, res) => {
     }
 });
 // 获取群组详情
-app.get('/api/groups/:groupId', authMiddleware, (req, res) => {
+exports.app.get('/api/groups/:groupId', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { userId } = req.user;
     const { groupId } = req.params;
@@ -498,7 +625,7 @@ app.get('/api/groups/:groupId', authMiddleware, (req, res) => {
     }
 });
 // 获取群组成员
-app.get('/api/groups/:groupId/members', authMiddleware, (req, res) => {
+exports.app.get('/api/groups/:groupId/members', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { groupId } = req.params;
     try {
@@ -523,7 +650,7 @@ app.get('/api/groups/:groupId/members', authMiddleware, (req, res) => {
     }
 });
 // 加入群组
-app.post('/api/groups/:groupId/join', authMiddleware, (req, res) => {
+exports.app.post('/api/groups/:groupId/join', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { userId } = req.user;
     const { groupId } = req.params;
@@ -549,7 +676,7 @@ app.post('/api/groups/:groupId/join', authMiddleware, (req, res) => {
     }
 });
 // 离开群组
-app.post('/api/groups/:groupId/leave', authMiddleware, (req, res) => {
+exports.app.post('/api/groups/:groupId/leave', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { userId } = req.user;
     const { groupId } = req.params;
@@ -572,7 +699,7 @@ app.post('/api/groups/:groupId/leave', authMiddleware, (req, res) => {
 });
 // ============ 消息相关 API ============
 // 发送消息
-app.post('/api/groups/:groupId/messages', authMiddleware, async (req, res) => {
+exports.app.post('/api/groups/:groupId/messages', authMiddleware, async (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { userId } = req.user;
     const { groupId } = req.params;
@@ -680,7 +807,7 @@ function extractMentions(content) {
     return [...new Set(matches.map(m => m.slice(1)))];
 }
 // 获取群组消息历史
-app.get('/api/groups/:groupId/messages', authMiddleware, (req, res) => {
+exports.app.get('/api/groups/:groupId/messages', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { userId } = req.user;
     const { groupId } = req.params;
@@ -710,8 +837,144 @@ app.get('/api/groups/:groupId/messages', authMiddleware, (req, res) => {
         res.status(500).json({ error: 'Failed to get messages' });
     }
 });
+// ============ 提及相关 API ============
+// 获取当前用户的提及列表
+exports.app.get('/api/mentions', authMiddleware, (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { userId } = req.user;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    const isReadFilter = req.query.is_read;
+    try {
+        let whereClause = 'WHERE m.mentioned_user_id = ?';
+        const params = [userId];
+        if (isReadFilter !== undefined) {
+            whereClause += ' AND m.is_read = ?';
+            params.push(isReadFilter === 'true' ? 1 : 0);
+        }
+        // 获取总数
+        const countResult = db.prepare(`
+      SELECT COUNT(*) as total, SUM(CASE WHEN m.is_read = 0 THEN 1 ELSE 0 END) as unread_count
+      FROM message_mentions m
+      ${whereClause}
+    `).get(...params);
+        // 获取列表
+        const mentions = db.prepare(`
+      SELECT 
+        m.id, m.message_id, m.is_read, m.created_at,
+        msg.content as content,
+        sender.id as sender_id, sender.username as sender_username, sender.nickname as sender_nickname,
+        g.id as group_id, g.name as group_name
+      FROM message_mentions m
+      JOIN messages msg ON m.message_id = msg.id
+      JOIN users sender ON m.sender_id = sender.id
+      LEFT JOIN groups g ON m.group_id = g.id
+      ${whereClause}
+      ORDER BY m.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+        res.json({
+            mentions: mentions.map((m) => ({
+                id: m.id,
+                messageId: m.message_id,
+                content: m.content,
+                senderId: m.sender_id,
+                senderUsername: m.sender_username,
+                senderNickname: m.sender_nickname,
+                groupId: m.group_id,
+                groupName: m.group_name,
+                isRead: Boolean(m.is_read),
+                createdAt: m.created_at
+            })),
+            total: countResult.total,
+            unreadCount: countResult.unread_count || 0
+        });
+    }
+    catch (error) {
+        console.error('Get mentions error:', error);
+        res.status(500).json({ error: 'Failed to get mentions' });
+    }
+});
+// 删除指定提及
+exports.app.delete('/api/mentions/:mentionId', authMiddleware, (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { userId } = req.user;
+    const { mentionId } = req.params;
+    try {
+        const mention = db.prepare(`
+      SELECT * FROM message_mentions WHERE id = ? AND mentioned_user_id = ?
+    `).get(mentionId, userId);
+        if (!mention) {
+            return res.status(404).json({ error: 'Mention not found or access denied', code: 'MENTION_NOT_FOUND' });
+        }
+        db.prepare('DELETE FROM message_mentions WHERE id = ?').run(mentionId);
+        res.json({ success: true, message: 'Mention deleted successfully' });
+    }
+    catch (error) {
+        console.error('Delete mention error:', error);
+        res.status(500).json({ error: 'Failed to delete mention' });
+    }
+});
+// 批量删除提及
+exports.app.delete('/api/mentions', authMiddleware, (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { userId } = req.user;
+    const filter = req.query.filter || 'read';
+    try {
+        let whereClause = 'WHERE mentioned_user_id = ?';
+        const params = [userId];
+        if (filter === 'read') {
+            whereClause += ' AND is_read = 1';
+        }
+        else if (filter !== 'all') {
+            return res.status(400).json({ error: 'Invalid filter. Use "read" or "all"' });
+        }
+        const result = db.prepare(`DELETE FROM message_mentions ${whereClause}`).run(...params);
+        res.json({ success: true, deletedCount: result.changes });
+    }
+    catch (error) {
+        console.error('Batch delete mentions error:', error);
+        res.status(500).json({ error: 'Failed to delete mentions' });
+    }
+});
+// 标记单条提及为已读
+exports.app.put('/api/mentions/:mentionId/read', authMiddleware, (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { userId } = req.user;
+    const { mentionId } = req.params;
+    try {
+        const mention = db.prepare(`
+      SELECT * FROM message_mentions WHERE id = ? AND mentioned_user_id = ?
+    `).get(mentionId, userId);
+        if (!mention) {
+            return res.status(404).json({ error: 'Mention not found', code: 'MENTION_NOT_FOUND' });
+        }
+        db.prepare('UPDATE message_mentions SET is_read = 1 WHERE id = ?').run(mentionId);
+        res.json({ success: true, isRead: true });
+    }
+    catch (error) {
+        console.error('Mark mention as read error:', error);
+        res.status(500).json({ error: 'Failed to mark mention as read' });
+    }
+});
+// 全部标记为已读
+exports.app.put('/api/mentions/read-all', authMiddleware, (req, res) => {
+    const db = (0, sqlite_1.getDatabase)();
+    const { userId } = req.user;
+    try {
+        const result = db.prepare(`
+      UPDATE message_mentions SET is_read = 1 WHERE mentioned_user_id = ? AND is_read = 0
+    `).run(userId);
+        res.json({ success: true, updatedCount: result.changes });
+    }
+    catch (error) {
+        console.error('Mark all mentions as read error:', error);
+        res.status(500).json({ error: 'Failed to mark all mentions as read' });
+    }
+});
+// ============ 消息相关 API ============
 // 获取私聊消息历史
-app.get('/api/messages/private/:otherUserId', authMiddleware, (req, res) => {
+exports.app.get('/api/messages/private/:otherUserId', authMiddleware, (req, res) => {
     const db = (0, sqlite_1.getDatabase)();
     const { userId } = req.user;
     const otherUserId = req.params.otherUserId;
@@ -740,7 +1003,7 @@ app.get('/api/messages/private/:otherUserId', authMiddleware, (req, res) => {
 function startHttpServer() {
     // ============ 全局错误处理 ============
     // 全局错误处理中间件
-    app.use((err, req, res, next) => {
+    exports.app.use((err, req, res, next) => {
         // 记录错误日志
         if (err instanceof utils_1.AppError) {
             utils_1.logger.error(`Application Error: ${err.message}`, {
@@ -778,13 +1041,13 @@ function startHttpServer() {
         }
     });
     // 404 处理（必须在所有路由之后）
-    app.use((req, res) => {
+    exports.app.use((req, res) => {
         res.status(404).json({
             error: 'Route not found',
             code: 'NOT_FOUND'
         });
     });
-    app.listen(config_1.config.http.port, () => {
+    exports.app.listen(config_1.config.http.port, () => {
         console.log(`🌐 HTTP API server running on port ${config_1.config.http.port}`);
     });
 }

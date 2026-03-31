@@ -50,8 +50,8 @@ npm start
 ```
 
 服务器将启动在以下端口：
-- MQTT TCP: `1883`
-- MQTT WebSocket: `8883`
+- MQTT TCP: `14080`
+- MQTT WebSocket: `14083`
 - HTTP API: `3000`
 
 ### 2. 配置客户端一键启动（推荐）
@@ -140,7 +140,7 @@ npm run dev
 
 ## 🔌 HTTP API 接口
 
-基础 URL: `http://localhost:3000`
+基础 URL: `http://localhost:14070`
 
 ### 用户接口
 
@@ -178,8 +178,8 @@ npm run dev
 ```typescript
 export const config = {
   mqtt: {
-    port: 1883,              // MQTT TCP 端口
-    websocketPort: 8883      // MQTT WebSocket 端口
+    port: 14080,              // MQTT TCP 端口
+    websocketPort: 14083      // MQTT WebSocket 端口
   },
   http: {
     port: 3000              // HTTP API 端口
@@ -202,7 +202,7 @@ export const config = {
 export const config = {
   mqtt: {
     host: 'localhost',      // MQTT 服务器地址
-    port: 1883,            // MQTT 端口
+    port: 14080,            // MQTT 端口
     protocol: 'mqtt'        // 协议类型
   },
   http: {

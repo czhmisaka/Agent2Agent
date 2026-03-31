@@ -1,12 +1,12 @@
 export const config = {
   mqtt: {
     host: process.env.MQTT_HOST || 'localhost',
-    port: parseInt(process.env.MQTT_PORT || '1883'),
+    port: parseInt(process.env.MQTT_PORT || '14080'),
     protocol: 'mqtt'
   },
   http: {
     host: process.env.HTTP_HOST || 'localhost',
-    port: parseInt(process.env.HTTP_PORT || '3000'),
+    port: parseInt(process.env.HTTP_PORT || '14070'),
     baseUrl: ''
   }
 };

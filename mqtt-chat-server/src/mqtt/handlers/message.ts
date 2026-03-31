@@ -1,4 +1,4 @@
-import { Client } from 'aedes';
+import { Client, PublishPacket } from 'aedes';
 import { getDatabase } from '../../database/sqlite';
 import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcrypt';
@@ -6,12 +6,73 @@ import jwt from 'jsonwebtoken';
 import { config } from '../../config';
 import { getAedes } from '../broker';
 import { handleMessageAction } from './action';
+import { 
+  MessagePayload, 
+  JwtPayload, 
+  User, 
+  Group, 
+  GroupMember,
+  Message,
+  FormattedReaction 
+} from '../../types';
 
-interface MessagePayload {
-  type: string;
-  timestamp: string;
-  payload: any;
-  meta?: any;
+// 定义数据库查询返回的用户类型
+interface DbUser {
+  id: string;
+  username: string;
+  nickname?: string;
+  password_hash: string;
+  is_online: number;
+  last_login?: string;
+}
+
+// 定义数据库查询返回的组成员类型
+interface DbGroupMember {
+  id: string;
+  group_id: string;
+  user_id: string;
+  role: string;
+}
+
+// 定义数据库查询返回的消息类型
+interface DbMessage {
+  id: string;
+  group_id?: string;
+  sender_id: string;
+  receiver_id?: string;
+  content: string;
+  content_type: string;
+  is_highlighted: number;
+  is_pinned: number;
+  is_recalled: number;
+  created_at: string;
+}
+
+// 定义群组类型
+interface DbGroup {
+  id: string;
+  name: string;
+  description?: string;
+  owner_id: string;
+  is_active: number;
+  created_at: string;
+}
+
+// 定义订阅类型
+interface DbSubscription {
+  id: string;
+  user_id: string;
+  subscription_type: string;
+  subscription_value: string;
+  group_id?: string;
+  is_active: number;
+  username: string;
+  is_online: number;
+}
+
+// 定义查询到的提及用户类型
+interface DbMentionedUser {
+  id: string;
 }
 
 export function handleMessage(client: Client, topic: string, payload: Buffer): void {
@@ -90,7 +151,7 @@ function handleAuthMessage(client: Client, topic: string, message: MessagePayloa
     const { username, password } = message.payload;
     
     try {
-      const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+      const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as DbUser | undefined;
       
       if (!user) {
         sendResponse(client, responseTopic, {
@@ -146,18 +207,30 @@ function handleGroupMessage(client: Client, topic: string, message: MessagePaylo
   const db = getDatabase();
   const parts = topic.split('/');
   const action = parts[3];
-  const groupId = parts[2];
+  const groupIdentifier = parts[2];  // 可能是名称或 ID
   
   if (action === 'message') {
     const { userId: payloadUserId, token, content } = message.payload;
 
     try {
-      const decoded = jwt.verify(token, config.jwt.secret) as any;
+      const decoded = jwt.verify(token, config.jwt.secret) as JwtPayload;
       const userId = decoded.userId;
+
+      // 先根据名称或 ID 查找群组 ID
+      let groupId = groupIdentifier;
+      const group = db.prepare(
+        'SELECT id FROM groups WHERE (id = ? OR name = ?) AND is_active = 1'
+      ).get(groupIdentifier, groupIdentifier) as { id: string } | undefined;
+      
+      if (!group) {
+        console.log(`❌ Group not found: ${groupIdentifier}`);
+        return;
+      }
+      groupId = group.id;
 
       const membership = db.prepare(
         'SELECT * FROM group_members WHERE group_id = ? AND user_id = ?'
-      ).get(groupId, userId);
+      ).get(groupId, userId) as DbGroupMember | undefined;
       
       if (!membership) {
         console.log(`❌ User ${userId} not in group ${groupId}`);
@@ -169,7 +242,7 @@ function handleGroupMessage(client: Client, topic: string, message: MessagePaylo
         .run(messageId, groupId, userId, content);
       
       const broadcastTopic = `chat/group/${groupId}/message`;
-      const user = db.prepare('SELECT username, nickname FROM users WHERE id = ?').get(userId) as any;
+      const user = db.prepare('SELECT username, nickname FROM users WHERE id = ?').get(userId) as { username: string; nickname?: string } | undefined;
       
       sendBroadcast(broadcastTopic, {
         type: 'message',
@@ -178,7 +251,7 @@ function handleGroupMessage(client: Client, topic: string, message: MessagePaylo
           messageId,
           content,
           contentType: 'text',
-          sender: { userId, username: user.username, nickname: user.nickname }
+          sender: { userId, username: user?.username || 'Unknown', nickname: user?.nickname || null }
         },
         meta: { groupId }
       }, client.id);
@@ -197,21 +270,24 @@ function handleGroupMessage(client: Client, topic: string, message: MessagePaylo
     try {
       jwt.verify(token, config.jwt.secret);
       
-      const group = db.prepare('SELECT * FROM groups WHERE id = ? AND is_active = 1').get(groupId);
+      // 支持名称或 ID 查询
+      const group = db.prepare(
+        'SELECT id FROM groups WHERE (id = ? OR name = ?) AND is_active = 1'
+      ).get(groupIdentifier, groupIdentifier) as { id: string } | undefined;
       
       if (!group) return;
       
       const memberId = uuidv4();
       db.prepare(`INSERT OR REPLACE INTO group_members (id, group_id, user_id, role) VALUES (?, ?, ?, 'member')`)
-        .run(memberId, groupId, userId);
+        .run(memberId, group.id, userId);
       
-      console.log(`✅ User ${userId} joined group ${groupId}`);
+      console.log(`✅ User ${userId} joined group ${group.id}`);
       
-      sendBroadcast(`chat/group/${groupId}/message`, {
+      sendBroadcast(`chat/group/${group.id}/message`, {
         type: 'system',
         timestamp: new Date().toISOString(),
         payload: { content: 'A new member joined the group', userId },
-        meta: { groupId }
+        meta: { groupId: group.id }
       }, client.id);
       
     } catch (error) {
@@ -224,16 +300,23 @@ function handleGroupMessage(client: Client, topic: string, message: MessagePaylo
     try {
       jwt.verify(token, config.jwt.secret);
       
+      // 支持名称或 ID 查询
+      const group = db.prepare(
+        'SELECT id FROM groups WHERE (id = ? OR name = ?) AND is_active = 1'
+      ).get(groupIdentifier, groupIdentifier) as { id: string } | undefined;
+      
+      if (!group) return;
+      
       db.prepare('DELETE FROM group_members WHERE group_id = ? AND user_id = ?')
-        .run(groupId, userId);
+        .run(group.id, userId);
       
-      console.log(`👋 User ${userId} left group ${groupId}`);
+      console.log(`👋 User ${userId} left group ${group.id}`);
       
-      sendBroadcast(`chat/group/${groupId}/message`, {
+      sendBroadcast(`chat/group/${group.id}/message`, {
         type: 'system',
         timestamp: new Date().toISOString(),
         payload: { content: 'A member left the group', userId },
-        meta: { groupId }
+        meta: { groupId: group.id }
       }, client.id);
       
     } catch (error) {
@@ -260,7 +343,7 @@ function handlePrivateMessage(client: Client, topic: string, message: MessagePay
     db.prepare(`INSERT INTO messages (id, sender_id, receiver_id, content) VALUES (?, ?, ?, ?)`)
       .run(messageId, senderId, receiverId, content);
     
-    const sender = db.prepare('SELECT username, nickname FROM users WHERE id = ?').get(senderId) as any;
+    const sender = db.prepare('SELECT username, nickname FROM users WHERE id = ?').get(senderId) as { username: string; nickname?: string } | undefined;
     
     sendToUser(receiverId, {
       type: 'message',
@@ -269,7 +352,7 @@ function handlePrivateMessage(client: Client, topic: string, message: MessagePay
         messageId,
         content,
         contentType: 'text',
-        sender: { userId: senderId, username: sender.username, nickname: sender.nickname }
+        sender: { userId: senderId, username: sender?.username || 'unknown', nickname: sender?.nickname }
       },
       meta: { receiverId }
     });
@@ -371,7 +454,7 @@ async function processMentions(messageId: string, senderId: string, groupId: str
   
   for (const username of mentions) {
     if (['全体成员', '所有人', 'all', 'channel'].includes(username)) {
-      const members = db.prepare('SELECT user_id FROM group_members WHERE group_id = ?').all(groupId) as any[];
+      const members = db.prepare('SELECT user_id FROM group_members WHERE group_id = ?').all(groupId) as { user_id: string }[];
       for (const member of members) {
         if (member.user_id !== senderId) {
           await sendMentionNotification(member.user_id, messageId, senderId, groupId);
@@ -380,7 +463,7 @@ async function processMentions(messageId: string, senderId: string, groupId: str
       continue;
     }
     
-    const mentionedUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as any;
+    const mentionedUser = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as DbMentionedUser | undefined;
     
     if (mentionedUser && mentionedUser.id !== senderId) {
       const mentionId = uuidv4();
@@ -400,9 +483,9 @@ async function sendMentionNotification(userId: string, messageId: string, sender
   const db = getDatabase();
   const aedes = getAedes();
   
-  const sender = db.prepare('SELECT username, nickname FROM users WHERE id = ?').get(senderId) as any;
-  const group = db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId) as any;
-  const message = db.prepare('SELECT content FROM messages WHERE id = ?').get(messageId) as any;
+  const sender = db.prepare('SELECT username, nickname FROM users WHERE id = ?').get(senderId) as { username: string; nickname?: string } | undefined;
+  const group = db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId) as { name: string } | undefined;
+  const message = db.prepare('SELECT content FROM messages WHERE id = ?').get(messageId) as { content: string } | undefined;
   
   if (!sender || !message) return;
   
@@ -426,7 +509,7 @@ async function sendMentionNotification(userId: string, messageId: string, sender
     retain: false,
     cmd: 'publish',
     dup: false
-  }, (err: any) => {
+  }, (err: Error | undefined) => {
     if (err) console.error('❌ Error sending mention notification:', err);
   });
 }
@@ -435,9 +518,9 @@ async function processSubscriptions(messageId: string, senderId: string, groupId
   const db = getDatabase();
   const aedes = getAedes();
   
-  const sender = db.prepare('SELECT username, nickname FROM users WHERE id = ?').get(senderId) as any;
-  const group = db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId) as any;
-  const message = db.prepare('SELECT content FROM messages WHERE id = ?').get(messageId) as any;
+  const sender = db.prepare('SELECT username, nickname FROM users WHERE id = ?').get(senderId) as { username: string; nickname?: string } | undefined;
+  const group = db.prepare('SELECT name FROM groups WHERE id = ?').get(groupId) as { name: string } | undefined;
+  const message = db.prepare('SELECT content FROM messages WHERE id = ?').get(messageId) as { content: string } | undefined;
   
   const subscriptions = db.prepare(`
     SELECT s.*, u.username, u.is_online
@@ -445,7 +528,7 @@ async function processSubscriptions(messageId: string, senderId: string, groupId
     JOIN users u ON s.user_id = u.id
     WHERE s.is_active = 1
     AND (s.group_id IS NULL OR s.group_id = ?)
-  `).all(groupId) as any[];
+  `).all(groupId) as DbSubscription[];
   
   for (const sub of subscriptions) {
     if (sub.user_id === senderId) continue;
@@ -486,7 +569,7 @@ async function processSubscriptions(messageId: string, senderId: string, groupId
         retain: false,
         cmd: 'publish',
         dup: false
-      }, (err: any) => {
+      }, (err: Error | undefined) => {
         if (err) console.error('❌ Error sending subscription notification:', err);
       });
       

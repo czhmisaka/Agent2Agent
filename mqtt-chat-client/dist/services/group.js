@@ -115,6 +115,23 @@ class GroupService {
     getJoinedGroups() {
         return Array.from(this.joinedGroups);
     }
+    async getSubscriptions() {
+        const subscriptions = await this.httpService.getSubscriptions();
+        if (!subscriptions || subscriptions.length === 0) {
+            console.log(chalk_1.default.yellow('\n📋 You have no subscriptions yet.'));
+            console.log(chalk_1.default.gray('  Use /subscribe keyword|topic|user <value> to create one\n'));
+            return;
+        }
+        console.log(chalk_1.default.yellow('\n📋 Your Subscriptions:'));
+        subscriptions.forEach((sub, index) => {
+            const typeIcon = sub.type === 'keyword' ? '🔑' : sub.type === 'topic' ? '#️⃣' : '👤';
+            console.log(`  ${index + 1}. ${typeIcon} ${chalk_1.default.cyan(sub.type)}: ${chalk_1.default.yellow(sub.value)}`);
+            if (sub.createdAt) {
+                console.log(`     ${chalk_1.default.gray('Created:')} ${chalk_1.default.gray(new Date(sub.createdAt).toLocaleString())}`);
+            }
+        });
+        console.log();
+    }
     getTokenFromStorage() {
         // 实际应该从 auth service 获取
         return null;

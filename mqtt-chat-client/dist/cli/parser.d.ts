@@ -24,7 +24,55 @@ export interface ParsedCommand {
     command: string;
     args: string[];
 }
+export declare const ALL_COMMANDS: string[];
 export declare class CommandParser {
+    /**
+     * 设置在线用户列表
+     */
+    setOnlineUsers(users: Array<{
+        userId: string;
+        username: string;
+    }>): void;
+    /**
+     * 获取在线用户列表
+     */
+    getOnlineUsers(): Array<{
+        userId: string;
+        username: string;
+    }>;
+    /**
+     * 设置已加入的群组列表
+     */
+    setJoinedGroups(groups: string[]): void;
+    /**
+     * 获取已加入的群组列表
+     */
+    getJoinedGroups(): string[];
+    /**
+     * Tab 补全触发检测
+     * 返回需要触发的补全类型
+     */
+    detectCompletionTrigger(line: string): 'command' | 'mention' | 'emoji' | 'group' | 'subscribe' | 'none';
+    /**
+     * 获取命令补全列表
+     */
+    getCommandCompletions(partial: string): string[];
+    /**
+     * 获取表情补全列表
+     */
+    getEmojiCompletions(partial: string): string[];
+    /**
+     * 获取群组补全列表
+     */
+    getGroupCompletions(partial: string): string[];
+    /**
+     * 获取订阅类型补全列表
+     */
+    getSubscribeCompletions(): string[];
+    /**
+     * 交互式选择在线用户
+     */
+    selectUser(searchTerm?: string): Promise<string | null>;
     /**
      * 主解析方法
      * 解析用户输入，提取所有信息

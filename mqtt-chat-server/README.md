@@ -74,8 +74,8 @@ npm test
 | 变量名 | 描述 | 默认值 |
 |--------|------|--------|
 | `HTTP_PORT` | HTTP 服务端口 | 3000 |
-| `MQTT_PORT` | MQTT TCP 端口 | 1883 |
-| `MQTT_WS_PORT` | MQTT WebSocket 端口 | 8883 |
+| `MQTT_PORT` | MQTT TCP 端口 | 14080 |
+| `MQTT_WS_PORT` | MQTT WebSocket 端口 | 14083 |
 | `JWT_SECRET` | JWT 密钥（生产环境必填） | 自动生成 |
 | `JWT_EXPIRES_IN` | Token 过期时间 | 7d |
 | `LOG_LEVEL` | 日志级别 | info |

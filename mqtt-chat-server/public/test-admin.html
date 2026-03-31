@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Test</title>
+</head>
+<body>
+    <h1>Admin Test Page</h1>
+    <div id="status">Checking...</div>
+    <button onclick="testLogin()">Test Login</button>
+    
+    <script>
+        console.log('Script starting...');
+        
+        // 全局错误捕获
+        window.onerror = function(msg, url, line, col, error) {
+            console.error('Global error:', msg, 'at line', line);
+            document.getElementById('status').textContent = 'Error: ' + msg;
+            return true;
+        };
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOMContentLoaded fired');
+            document.getElementById('status').textContent = 'DOM loaded, trying to login...';
+            
+            // 自动尝试登录
+            testLogin();
+        });
+        
+        async function testLogin() {
+            console.log('testLogin called');
+            try {
+                const response = await fetch('http://localhost:14050/api/users/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        username: 'admin',
+                        password: 'Admin@123'
+                    })
+                });
+                
+                console.log('Response status:', response.status);
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                if (data.success) {
+                    document.getElementById('status').textContent = 'Login successful! Token set in cookie.';
+                    console.log('Login successful, checking cookie...');
+                    console.log('Cookie:', document.cookie);
+                } else {
+                    document.getElementById('status').textContent = 'Login failed: ' + data.error;
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                document.getElementById('status').textContent = 'Error: ' + error.message;
+            }
+        }
+        
+        console.log('Script loaded completely');
+    </script>
+</body>
+</html>

@@ -38,6 +38,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const readline = __importStar(require("readline"));
+const minimist_1 = __importDefault(require("minimist"));
 const client_1 = require("./mqtt/client");
 const http_1 = require("./services/http");
 const auth_1 = require("./services/auth");
@@ -60,6 +61,10 @@ class ChatClient {
     currentUser = null;
     currentGroupId = '';
     messageIdCounter = 0;
+    onlineUsers = [];
+    commandHistory = [];
+    historyIndex = -1;
+    isDaemonMode = false;
     constructor() {
         this.mqttClient = new client_1.MqttClientService();
         this.httpService = new http_1.HttpService();
@@ -67,38 +72,185 @@ class ChatClient {
         this.groupService = new group_1.GroupService(this.httpService, this.mqttClient);
         this.messageService = new message_1.MessageService(this.httpService, this.mqttClient);
         this.commandParser = new parser_1.CommandParser();
+    }
+    /**
+     * 解析命令行参数
+     */
+    parseArgs() {
+        const argv = (0, minimist_1.default)(process.argv.slice(2));
+        const options = {};
+        // 检查是否只是验证模式
+        if (argv.validate || argv.v) {
+            options.validate = true;
+        }
+        // 检查是否为守护模式
+        if (argv.daemon || argv.d) {
+            options.daemon = true;
+        }
+        // 位置参数：username, password, groupId, message
+        const positional = argv._;
+        if (positional.length >= 2) {
+            options.username = positional[0];
+            options.password = positional[1];
+        }
+        if (positional.length >= 3) {
+            options.groupId = positional[2];
+        }
+        if (positional.length >= 4) {
+            options.message = positional.slice(3).join(' ');
+        }
+        return options;
+    }
+    /**
+     * Tab 补全函数
+     */
+    completer(line) {
+        const trigger = this.commandParser.detectCompletionTrigger(line);
+        switch (trigger) {
+            case 'command':
+                return [this.commandParser.getCommandCompletions(line), line];
+            case 'mention':
+                // @ 触发交互式用户选择
+                const searchTerm = line.substring(1);
+                const matches = this.onlineUsers.filter(u => u.username.toLowerCase().includes(searchTerm.toLowerCase()));
+                return [matches.map(u => `@${u.username}`), line];
+            case 'emoji':
+                return [this.commandParser.getEmojiCompletions(line), line];
+            case 'subscribe':
+                return [this.commandParser.getSubscribeCompletions(), line];
+            default:
+                return [[], line];
+        }
+    }
+    /**
+     * 初始化 readline 接口
+     */
+    initReadline() {
         this.rl = readline.createInterface({
             input: process.stdin,
-            output: process.stdout
+            output: process.stdout,
+            completer: (line) => this.completer(line),
+            terminal: true
         });
+        // 启用终端样式支持
+        readline.emitKeypressEvents(process.stdin);
+        if (process.stdin.isTTY) {
+            process.stdin.setRawMode(true);
+        }
     }
     async start() {
+        // 解析命令行参数
+        const options = this.parseArgs();
+        // 显示欢迎信息
         console.log(chalk_1.default.blue('╔══════════════════════════════════════════╗'));
         console.log(chalk_1.default.blue('║       MQTT Chat CLI v2.0 (Extended)      ║'));
         console.log(chalk_1.default.blue('╚══════════════════════════════════════════╝'));
-        console.log(chalk_1.default.gray('Connecting to server...'));
-        try {
-            // 连接 MQTT
-            await this.mqttClient.connect();
-            console.log(chalk_1.default.green('✅ Connected to MQTT server'));
-            // 初始化点对点服务
-            this.peerService = (0, peer_1.createPeerService)(this.mqttClient);
-            // 订阅消息
-            this.subscribeToMessages();
-            // 设置 PeerService 回调
-            this.setupPeerCallbacks();
-            // 显示帮助
-            this.showHelp();
-            // 开始命令行循环
-            this.startCommandLoop();
+        console.log();
+        // 检查是否为命令行模式
+        if (options.username && options.password) {
+            // 命令行模式
+            await this.startCommandLineMode(options);
         }
-        catch (error) {
-            console.error(chalk_1.default.red('❌ Failed to connect:'), error);
-            process.exit(1);
+        else {
+            // 交互模式
+            await this.startInteractiveMode();
         }
     }
+    /**
+     * 命令行模式 - 单行指令执行
+     */
+    async startCommandLineMode(options) {
+        console.log(chalk_1.default.gray('📡 Connecting...'));
+        console.log();
+        const { username, password, groupId, message, validate } = options;
+        // 验证模式
+        if (validate) {
+            const success = await this.authService.login(username, password);
+            if (success) {
+                console.log(chalk_1.default.green('✅ Credentials valid'));
+            }
+            else {
+                console.log(chalk_1.default.red('❌ Invalid credentials'));
+                process.exit(1);
+            }
+            return;
+        }
+        // 登录
+        console.log(chalk_1.default.gray(`🔐 Logging in as ${username}...`));
+        const loginSuccess = await this.authService.login(username, password);
+        if (!loginSuccess) {
+            console.log(chalk_1.default.red('❌ Login failed'));
+            process.exit(1);
+        }
+        console.log(chalk_1.default.green('✅ Logged in successfully'));
+        // 连接 MQTT
+        const token = this.authService.getToken();
+        const userId = this.authService.getUserId();
+        if (token && userId) {
+            try {
+                await this.mqttClient.connect({ username: username, password: token });
+                console.log(chalk_1.default.green('✅ Connected to MQTT server'));
+                // 初始化服务
+                this.peerService = (0, peer_1.createPeerService)(this.mqttClient);
+                this.subscribeToMessages();
+                this.setupPeerCallbacks();
+                this.peerService.setUserInfo(userId, username, token);
+                this.peerService.subscribeTopics();
+                console.log(chalk_1.default.green('✅ MQTT services initialized'));
+                // 加入群组
+                if (groupId) {
+                    this.groupService.setCredentials(userId, token);
+                    await this.groupService.joinGroup(groupId, token, userId);
+                    this.currentGroupId = groupId;
+                    console.log(chalk_1.default.green(`✅ Joined group: ${groupId}`));
+                }
+                // 发送消息
+                if (message) {
+                    this.messageService.setCredentials(userId, token);
+                    await this.messageService.sendMessage(this.currentGroupId || groupId, message, userId);
+                    console.log(chalk_1.default.green(`✅ Message sent: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`));
+                }
+                // 保持连接并进入交互模式
+                this.isDaemonMode = true;
+                this.isLoggedIn = true;
+                this.currentUser = { userId, username, token };
+                console.log();
+                console.log(chalk_1.default.cyan('━'.repeat(42)));
+                console.log(chalk_1.default.green('✅ Connected - entering interactive mode'));
+                if (groupId) {
+                    console.log(chalk_1.default.green(`   Joined group: ${groupId}`));
+                }
+                else {
+                    console.log(chalk_1.default.gray('   Use /join <groupId> to join a group'));
+                }
+                console.log(chalk_1.default.cyan('━'.repeat(42)));
+                console.log();
+                // 进入交互模式
+                await this.startInteractiveMode();
+            }
+            catch (error) {
+                console.error(chalk_1.default.red('⚠️  MQTT connection failed:'), error);
+                process.exit(1);
+            }
+        }
+    }
+    /**
+     * 交互模式 - 交互式命令行
+     */
+    async startInteractiveMode() {
+        console.log(chalk_1.default.gray('📡 Connection will be established after login...'));
+        console.log(chalk_1.default.gray('   Use /login <username> <password> to authenticate'));
+        console.log(chalk_1.default.gray('   Or /register <username> <password> to create account'));
+        console.log();
+        // 显示帮助
+        this.showHelp();
+        // 初始化 readline
+        this.initReadline();
+        // 开始命令行循环
+        await this.startCommandLoop();
+    }
     subscribeToMessages() {
-        // 订阅所有群组消息（实际应该只订阅已加入的群组）
+        // 订阅所有群组消息
         this.mqttClient.subscribe('chat/group/+/message', (topic, message) => {
             this.handleIncomingMessage(topic, message);
         });
@@ -118,6 +270,19 @@ class ChatClient {
         this.mqttClient.subscribe('chat/group/+/action/response', (topic, message) => {
             this.handleActionResponse(message);
         });
+        // 订阅在线用户列表更新
+        this.mqttClient.subscribe('chat/presence/online', (topic, message) => {
+            this.handlePresenceUpdate(message);
+        });
+    }
+    handlePresenceUpdate(message) {
+        if (message.type === 'presence' && message.payload) {
+            const { users } = message.payload;
+            if (Array.isArray(users)) {
+                this.onlineUsers = users;
+                this.commandParser.setOnlineUsers(users);
+            }
+        }
     }
     setupPeerCallbacks() {
         this.peerService.setCallbacks({
@@ -218,25 +383,45 @@ class ChatClient {
         console.log(renderer_1.renderer.renderHelp());
     }
     startCommandLoop() {
-        this.rl.question(chalk_1.default.blue('> '), async (input) => {
-            const trimmedInput = input.trim();
-            if (!trimmedInput) {
-                this.startCommandLoop();
-                return;
-            }
-            try {
-                // 处理普通消息（不是以 / 开头的）
-                if (!trimmedInput.startsWith('/')) {
-                    await this.processRegularMessage(trimmedInput);
-                }
-                else {
-                    await this.processCommand(trimmedInput);
-                }
-            }
-            catch (error) {
-                console.error(renderer_1.renderer.renderError(String(error)));
-            }
-            this.startCommandLoop();
+        return new Promise((resolve) => {
+            const prompt = () => {
+                this.rl.question(chalk_1.default.blue('> '), async (input) => {
+                    const trimmedInput = input.trim();
+                    if (!trimmedInput) {
+                        prompt();
+                        return;
+                    }
+                    // 添加到历史记录
+                    if (this.commandHistory[this.commandHistory.length - 1] !== trimmedInput) {
+                        this.commandHistory.push(trimmedInput);
+                        this.historyIndex = this.commandHistory.length;
+                    }
+                    try {
+                        // 处理 @ 触发用户选择器
+                        if (trimmedInput.startsWith('@') && !trimmedInput.includes(' ')) {
+                            const searchTerm = trimmedInput.substring(1);
+                            const selectedUser = await this.commandParser.selectUser(searchTerm);
+                            if (selectedUser) {
+                                this.rl.write(`@${selectedUser} `);
+                            }
+                            prompt();
+                            return;
+                        }
+                        // 处理普通消息或命令
+                        if (!trimmedInput.startsWith('/')) {
+                            await this.processRegularMessage(trimmedInput);
+                        }
+                        else {
+                            await this.processCommand(trimmedInput);
+                        }
+                    }
+                    catch (error) {
+                        console.error(renderer_1.renderer.renderError(String(error)));
+                    }
+                    prompt();
+                });
+            };
+            prompt();
         });
     }
     async processRegularMessage(content) {
@@ -250,7 +435,7 @@ class ChatClient {
         const userId = this.authService.getUserId();
         if (token && userId) {
             this.messageService.setCredentials(userId, token);
-            await this.messageService.sendMessage(this.currentGroupId, content, token, userId);
+            await this.messageService.sendMessage(this.currentGroupId, content, userId);
         }
     }
     async processCommand(input) {
@@ -261,14 +446,60 @@ class ChatClient {
                     console.log(renderer_1.renderer.renderError('Usage: /login <username> <password>'));
                     return;
                 }
-                await this.authService.login(args[0], args[1]);
+                const loginSuccess = await this.authService.login(args[0], args[1]);
+                if (loginSuccess) {
+                    const token = this.authService.getToken();
+                    const username = this.authService.getUsername();
+                    const userId = this.authService.getUserId();
+                    if (token && username && userId) {
+                        try {
+                            await this.mqttClient.connect({
+                                username,
+                                password: token
+                            });
+                            console.log(chalk_1.default.green('✅ Connected to MQTT server'));
+                            this.peerService = (0, peer_1.createPeerService)(this.mqttClient);
+                            this.subscribeToMessages();
+                            this.setupPeerCallbacks();
+                            this.peerService.setUserInfo(userId, username, token);
+                            this.peerService.subscribeTopics();
+                            console.log(chalk_1.default.green('✅ MQTT services initialized'));
+                        }
+                        catch (error) {
+                            console.error(chalk_1.default.red('⚠️ MQTT connection failed:'), error);
+                        }
+                    }
+                }
                 break;
             case 'register':
                 if (args.length < 2) {
                     console.log(renderer_1.renderer.renderError('Usage: /register <username> <password>'));
                     return;
                 }
-                await this.authService.register(args[0], args[1]);
+                const registerSuccess = await this.authService.register(args[0], args[1]);
+                if (registerSuccess) {
+                    const token = this.authService.getToken();
+                    const username = this.authService.getUsername();
+                    const userId = this.authService.getUserId();
+                    if (token && username && userId) {
+                        try {
+                            await this.mqttClient.connect({
+                                username,
+                                password: token
+                            });
+                            console.log(chalk_1.default.green('✅ Connected to MQTT server'));
+                            this.peerService = (0, peer_1.createPeerService)(this.mqttClient);
+                            this.subscribeToMessages();
+                            this.setupPeerCallbacks();
+                            this.peerService.setUserInfo(userId, username, token);
+                            this.peerService.subscribeTopics();
+                            console.log(chalk_1.default.green('✅ MQTT services initialized'));
+                        }
+                        catch (error) {
+                            console.error(chalk_1.default.red('⚠️ MQTT connection failed:'), error);
+                        }
+                    }
+                }
                 break;
             case 'create':
                 if (!this.requireLogin())
@@ -277,14 +508,13 @@ class ChatClient {
                     console.log(renderer_1.renderer.renderError('Usage: /create <groupname>'));
                     return;
                 }
-                const createResult = await this.authService.login(args[0], args[1]);
-                if (createResult) {
-                    const token = this.authService.getToken();
-                    const userId = this.authService.getUserId();
+                const token = this.authService.getToken();
+                const userId = this.authService.getUserId();
+                if (token && userId) {
                     this.groupService.setCredentials(userId, token);
                     const result = await this.groupService.createGroup(args[0], token, userId);
                     if (result) {
-                        this.currentGroupId = args[0]; // 使用 groupname 作为 ID
+                        this.currentGroupId = args[0];
                     }
                 }
                 break;
@@ -301,6 +531,7 @@ class ChatClient {
                     this.groupService.setCredentials(joinUserId, joinToken);
                     await this.groupService.joinGroup(args[0], joinToken, joinUserId);
                     this.currentGroupId = args[0];
+                    this.commandParser.setJoinedGroups([...this.commandParser.getJoinedGroups(), args[0]]);
                     console.log(renderer_1.renderer.renderInfo(`Switched to group: ${args[0]}`));
                 }
                 break;
@@ -322,6 +553,8 @@ class ChatClient {
                 }
                 break;
             case 'groups':
+            case 'list':
+            case 'l':
                 if (!this.requireLogin())
                     return;
                 const groupsToken = this.authService.getToken();
@@ -356,7 +589,7 @@ class ChatClient {
                 const sendUserId = this.authService.getUserId();
                 if (sendToken && sendUserId) {
                     this.messageService.setCredentials(sendUserId, sendToken);
-                    await this.messageService.sendMessage(sendGroupId, sendContent, sendToken, sendUserId);
+                    await this.messageService.sendMessage(sendGroupId, sendContent, sendUserId);
                 }
                 break;
             case 'history':
@@ -374,6 +607,8 @@ class ChatClient {
                 }
                 break;
             case 'users':
+            case 'who':
+            case 'w':
                 if (!this.requireLogin())
                     return;
                 const usersToken = this.authService.getToken();
@@ -382,7 +617,6 @@ class ChatClient {
                     await this.httpService.getUsers();
                 }
                 break;
-            // ==================== 新增指令 ====================
             case 'highlight':
                 if (!this.requireLogin())
                     return;
@@ -441,14 +675,66 @@ class ChatClient {
             case 'subscriptions':
                 if (!this.requireLogin())
                     return;
-                console.log(renderer_1.renderer.renderInfo('Viewing your subscriptions...'));
-                // TODO: 实现查看订阅列表
+                {
+                    const token = this.authService.getToken();
+                    const userId = this.authService.getUserId();
+                    if (token && userId) {
+                        this.groupService.setCredentials(userId, token);
+                        await this.groupService.getSubscriptions();
+                    }
+                }
                 break;
             case 'mention':
                 if (!this.requireLogin())
                     return;
-                console.log(renderer_1.renderer.renderInfo('Viewing mentions...'));
-                // TODO: 实现查看提及列表
+                {
+                    const token = this.authService.getToken();
+                    const userId = this.authService.getUserId();
+                    if (token && userId) {
+                        this.messageService.setCredentials(userId, token);
+                        // /mention read <id> - 标记单条已读
+                        if (args[0] === 'read' && args[1]) {
+                            const success = await this.messageService.markMentionAsRead(args[1]);
+                            if (success) {
+                                console.log(renderer_1.renderer.renderSuccess('Mention marked as read'));
+                            }
+                            else {
+                                console.log(renderer_1.renderer.renderError('Failed to mark mention as read'));
+                            }
+                        }
+                        // /mention read --all - 全部标记已读
+                        else if (args[0] === 'read' && args[1] === '--all') {
+                            const count = await this.messageService.markAllMentionsAsRead();
+                            console.log(renderer_1.renderer.renderSuccess(`Marked ${count} mentions as read`));
+                        }
+                        // /mention delete <id> - 删除单条
+                        else if (args[0] === 'delete' && args[1]) {
+                            const success = await this.messageService.deleteMention(args[1]);
+                            if (success) {
+                                console.log(renderer_1.renderer.renderSuccess('Mention deleted'));
+                            }
+                            else {
+                                console.log(renderer_1.renderer.renderError('Failed to delete mention'));
+                            }
+                        }
+                        // /mention clear - 清空已读的
+                        else if (args[0] === 'clear') {
+                            const filter = args[1] === '--all' ? 'all' : 'read';
+                            const count = await this.messageService.clearMentions(filter);
+                            if (filter === 'all') {
+                                console.log(renderer_1.renderer.renderSuccess(`Deleted ${count} mentions`));
+                            }
+                            else {
+                                console.log(renderer_1.renderer.renderSuccess(`Deleted ${count} read mentions`));
+                            }
+                        }
+                        // /mention - 查看列表
+                        else {
+                            const limit = args[0] ? parseInt(args[0]) : 50;
+                            await this.messageService.getMentions(limit);
+                        }
+                    }
+                }
                 break;
             case 'emoji':
                 if (!this.requireLogin())
@@ -463,13 +749,21 @@ class ChatClient {
             case 'stats':
                 if (!this.requireLogin())
                     return;
-                console.log(renderer_1.renderer.renderInfo('Fetching stats...'));
-                // TODO: 实现统计功能
+                {
+                    const token = this.authService.getToken();
+                    const userId = this.authService.getUserId();
+                    if (token && userId) {
+                        this.messageService.setCredentials(userId, token);
+                        await this.messageService.getStats(args[0] || undefined);
+                    }
+                }
                 break;
             case 'clear':
                 renderer_1.renderer.clear();
                 break;
             case 'help':
+            case 'h':
+            case '?':
                 this.showHelp();
                 break;
             case 'quit':
@@ -489,17 +783,11 @@ class ChatClient {
             console.error(renderer_1.renderer.renderWarning('Please join a group first'));
             return;
         }
-        const token = this.authService.getToken();
-        if (!token)
-            return;
         const message = {
             type: 'action',
             action,
             timestamp: new Date().toISOString(),
-            payload: {
-                ...payload,
-                token
-            },
+            payload,
             meta: {
                 groupId: this.currentGroupId,
                 correlationId: this.generateMessageId()

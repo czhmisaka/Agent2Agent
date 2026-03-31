@@ -206,6 +206,93 @@ class HttpService {
             return null;
         }
     }
+    // 订阅相关 API
+    async getSubscriptions() {
+        try {
+            const response = await this.client.get('/api/subscriptions');
+            return response.data;
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('❌ Failed to get subscriptions:'), error.message);
+        }
+        return [];
+    }
+    // 提及相关 API
+    async getMentions(options) {
+        try {
+            const params = {};
+            if (options?.limit)
+                params.limit = options.limit;
+            if (options?.offset)
+                params.offset = options.offset;
+            if (options?.isRead !== undefined)
+                params.is_read = options.isRead;
+            const response = await this.client.get('/api/mentions', { params });
+            return response.data;
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('❌ Failed to get mentions:'), error.message);
+        }
+        return { mentions: [], total: 0, unreadCount: 0 };
+    }
+    // 删除单条提及
+    async deleteMention(mentionId) {
+        try {
+            await this.client.delete(`/api/mentions/${mentionId}`);
+            return true;
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('❌ Failed to delete mention:'), error.message);
+            return false;
+        }
+    }
+    // 批量删除提及
+    async deleteMentions(filter = 'read') {
+        try {
+            const response = await this.client.delete('/api/mentions', {
+                params: { filter }
+            });
+            return response.data.deletedCount || 0;
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('❌ Failed to delete mentions:'), error.message);
+            return 0;
+        }
+    }
+    // 标记单条提及为已读
+    async markMentionAsRead(mentionId) {
+        try {
+            await this.client.put(`/api/mentions/${mentionId}/read`);
+            return true;
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('❌ Failed to mark mention as read:'), error.message);
+            return false;
+        }
+    }
+    // 全部标记为已读
+    async markAllMentionsAsRead() {
+        try {
+            const response = await this.client.put('/api/mentions/read-all');
+            return response.data.updatedCount || 0;
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('❌ Failed to mark all mentions as read:'), error.message);
+            return 0;
+        }
+    }
+    // 统计相关 API
+    async getStats(userId) {
+        try {
+            const url = userId ? `/api/stats/${userId}` : '/api/stats';
+            const response = await this.client.get(url);
+            return response.data;
+        }
+        catch (error) {
+            console.error(chalk_1.default.red('❌ Failed to get stats:'), error.message);
+        }
+        return null;
+    }
 }
 exports.HttpService = HttpService;
 //# sourceMappingURL=http.js.map

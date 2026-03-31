@@ -41,7 +41,7 @@ describe('MessageService', () => {
     it('should return true on successful send', async () => {
       mockMqttClient.publish.mockResolvedValue();
 
-      const result = await messageService.sendMessage('group-123', 'Hello world', 'token', 'user-123');
+      const result = await messageService.sendMessage('group-123', 'Hello world', 'user-123');
 
       expect(result).toBe(true);
       expect(mockMqttClient.publish).toHaveBeenCalledWith(
@@ -50,7 +50,6 @@ describe('MessageService', () => {
           type: 'message',
           payload: expect.objectContaining({
             userId: 'user-123',
-            token: 'token',
             content: 'Hello world'
           }),
           meta: expect.objectContaining({
@@ -64,7 +63,7 @@ describe('MessageService', () => {
     it('should return false on publish error', async () => {
       mockMqttClient.publish.mockRejectedValue(new Error('Network error'));
 
-      const result = await messageService.sendMessage('group-123', 'Hello world', 'token', 'user-123');
+      const result = await messageService.sendMessage('group-123', 'Hello world', 'user-123');
 
       expect(result).toBe(false);
     });
@@ -72,7 +71,7 @@ describe('MessageService', () => {
     it('should include messageId in meta', async () => {
       mockMqttClient.publish.mockResolvedValue();
 
-      await messageService.sendMessage('group-123', 'Hello', 'token', 'user-123');
+      await messageService.sendMessage('group-123', 'Hello', 'user-123');
 
       expect(mockMqttClient.publish).toHaveBeenCalledWith(
         'chat/group/group-123/message',
@@ -90,7 +89,7 @@ describe('MessageService', () => {
     it('should return true on successful send', async () => {
       mockMqttClient.publish.mockResolvedValue();
 
-      const result = await messageService.sendPrivateMessage('receiver-456', 'Secret message', 'token', 'sender-123');
+      const result = await messageService.sendPrivateMessage('receiver-456', 'Secret message', 'sender-123');
 
       expect(result).toBe(true);
       expect(mockMqttClient.publish).toHaveBeenCalledWith(
@@ -99,7 +98,6 @@ describe('MessageService', () => {
           type: 'message',
           payload: expect.objectContaining({
             senderId: 'sender-123',
-            token: 'token',
             content: 'Secret message'
           }),
           meta: expect.objectContaining({
@@ -113,7 +111,7 @@ describe('MessageService', () => {
     it('should return false on publish error', async () => {
       mockMqttClient.publish.mockRejectedValue(new Error('Connection lost'));
 
-      const result = await messageService.sendPrivateMessage('receiver-456', 'Secret', 'token', 'sender-123');
+      const result = await messageService.sendPrivateMessage('receiver-456', 'Secret', 'sender-123');
 
       expect(result).toBe(false);
     });
@@ -121,7 +119,7 @@ describe('MessageService', () => {
     it('should include messageId in meta', async () => {
       mockMqttClient.publish.mockResolvedValue();
 
-      await messageService.sendPrivateMessage('receiver-456', 'Hello', 'token', 'sender-123');
+      await messageService.sendPrivateMessage('receiver-456', 'Hello', 'sender-123');
 
       expect(mockMqttClient.publish).toHaveBeenCalledWith(
         'chat/user/receiver-456/private',

@@ -17,5 +17,16 @@ export declare class HttpService {
     getGroupMessages(groupId: string, limit?: number, offset?: number): Promise<any>;
     getPrivateMessages(userId: string, limit?: number, offset?: number): Promise<any>;
     healthCheck(): Promise<any>;
+    getSubscriptions(): Promise<any>;
+    getMentions(options?: {
+        limit?: number;
+        offset?: number;
+        isRead?: boolean;
+    }): Promise<any>;
+    deleteMention(mentionId: string): Promise<boolean>;
+    deleteMentions(filter?: 'read' | 'all'): Promise<number>;
+    markMentionAsRead(mentionId: string): Promise<boolean>;
+    markAllMentionsAsRead(): Promise<number>;
+    getStats(userId?: string): Promise<any>;
 }
 //# sourceMappingURL=http.d.ts.map

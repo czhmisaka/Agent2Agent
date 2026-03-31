@@ -14,9 +14,9 @@ services:
     container_name: mqtt-chat-server
     restart: unless-stopped
     ports:
-      - "3000:3000"   # HTTP API
-      - "1883:1883"   # MQTT TCP
-      - "8883:8883"   # MQTT WebSocket
+      - "14070:14070"   # HTTP API
+      - "14080:14080"   # MQTT TCP
+      - "14083:14083"   # MQTT WebSocket
     environment:
       # 服务器配置
       - NODE_ENV=development

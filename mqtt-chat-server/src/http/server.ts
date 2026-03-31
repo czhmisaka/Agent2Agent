@@ -19,17 +19,32 @@ if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }
 
-const app = express();
+export const app = express();
 
-// 安全中间件
-app.use(helmet()); // 安全头部
+// 安全中间件 - 允许内联脚本和本地资源
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      connectSrc: ["'self'", "ws:", "wss:", "http:", "https:"],
+      imgSrc: ["'self'", "data:", "https:"],
+      fontSrc: ["'self'", "data:"],
+      frameSrc: ["'none'"]
+    }
+  },
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+})); // 安全头部
 // CORS 配置：生产环境禁止使用 '*'
 const corsOptions: cors.CorsOptions = {
   origin: config.cors.allowedOrigins.length > 0
     ? config.cors.allowedOrigins
     : (process.env.NODE_ENV === 'production'
       ? [] // 生产环境无配置时拒绝所有跨域请求
-      : ['http://localhost:3000', 'http://localhost:8080']), // 开发环境默认允许本地
+      : ['http://localhost:14070', 'http://localhost:8080']), // 开发环境默认允许本地
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -492,11 +507,13 @@ app.post('/api/users/login', async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 天
     });
 
+    // 同时返回 token 给客户端存储（JWT 不涉及敏感信息）
     res.json({
       success: true,
       userId: user.id,
       username: user.username,
-      nickname: user.nickname
+      nickname: user.nickname,
+      token: token
     });
 
   } catch (error) {
@@ -939,6 +956,162 @@ app.get('/api/groups/:groupId/messages', authMiddleware, (req, res) => {
     res.status(500).json({ error: 'Failed to get messages' });
   }
 });
+
+// ============ 提及相关 API ============
+
+// 获取当前用户的提及列表
+app.get('/api/mentions', authMiddleware, (req, res) => {
+  const db = getDatabase();
+  const { userId } = (req as any).user;
+  const limit = parseInt(req.query.limit as string) || 50;
+  const offset = parseInt(req.query.offset as string) || 0;
+  const isReadFilter = req.query.is_read;
+  
+  try {
+    let whereClause = 'WHERE m.mentioned_user_id = ?';
+    const params: any[] = [userId];
+    
+    if (isReadFilter !== undefined) {
+      whereClause += ' AND m.is_read = ?';
+      params.push(isReadFilter === 'true' ? 1 : 0);
+    }
+    
+    // 获取总数
+    const countResult = db.prepare(`
+      SELECT COUNT(*) as total, SUM(CASE WHEN m.is_read = 0 THEN 1 ELSE 0 END) as unread_count
+      FROM message_mentions m
+      ${whereClause}
+    `).get(...params) as any;
+    
+    // 获取列表
+    const mentions = db.prepare(`
+      SELECT 
+        m.id, m.message_id, m.is_read, m.created_at,
+        msg.content as content,
+        sender.id as sender_id, sender.username as sender_username, sender.nickname as sender_nickname,
+        g.id as group_id, g.name as group_name
+      FROM message_mentions m
+      JOIN messages msg ON m.message_id = msg.id
+      JOIN users sender ON m.sender_id = sender.id
+      LEFT JOIN groups g ON m.group_id = g.id
+      ${whereClause}
+      ORDER BY m.created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+    
+    res.json({
+      mentions: mentions.map((m: any) => ({
+        id: m.id,
+        messageId: m.message_id,
+        content: m.content,
+        senderId: m.sender_id,
+        senderUsername: m.sender_username,
+        senderNickname: m.sender_nickname,
+        groupId: m.group_id,
+        groupName: m.group_name,
+        isRead: Boolean(m.is_read),
+        createdAt: m.created_at
+      })),
+      total: countResult.total,
+      unreadCount: countResult.unread_count || 0
+    });
+  } catch (error) {
+    console.error('Get mentions error:', error);
+    res.status(500).json({ error: 'Failed to get mentions' });
+  }
+});
+
+// 删除指定提及
+app.delete('/api/mentions/:mentionId', authMiddleware, (req, res) => {
+  const db = getDatabase();
+  const { userId } = (req as any).user;
+  const { mentionId } = req.params;
+  
+  try {
+    const mention = db.prepare(`
+      SELECT * FROM message_mentions WHERE id = ? AND mentioned_user_id = ?
+    `).get(mentionId, userId);
+    
+    if (!mention) {
+      return res.status(404).json({ error: 'Mention not found or access denied', code: 'MENTION_NOT_FOUND' });
+    }
+    
+    db.prepare('DELETE FROM message_mentions WHERE id = ?').run(mentionId);
+    
+    res.json({ success: true, message: 'Mention deleted successfully' });
+  } catch (error) {
+    console.error('Delete mention error:', error);
+    res.status(500).json({ error: 'Failed to delete mention' });
+  }
+});
+
+// 批量删除提及
+app.delete('/api/mentions', authMiddleware, (req, res) => {
+  const db = getDatabase();
+  const { userId } = (req as any).user;
+  const filter = req.query.filter as string || 'read';
+  
+  try {
+    let whereClause = 'WHERE mentioned_user_id = ?';
+    const params: any[] = [userId];
+    
+    if (filter === 'read') {
+      whereClause += ' AND is_read = 1';
+    } else if (filter !== 'all') {
+      return res.status(400).json({ error: 'Invalid filter. Use "read" or "all"' });
+    }
+    
+    const result = db.prepare(`DELETE FROM message_mentions ${whereClause}`).run(...params);
+    
+    res.json({ success: true, deletedCount: result.changes });
+  } catch (error) {
+    console.error('Batch delete mentions error:', error);
+    res.status(500).json({ error: 'Failed to delete mentions' });
+  }
+});
+
+// 标记单条提及为已读
+app.put('/api/mentions/:mentionId/read', authMiddleware, (req, res) => {
+  const db = getDatabase();
+  const { userId } = (req as any).user;
+  const { mentionId } = req.params;
+  
+  try {
+    const mention = db.prepare(`
+      SELECT * FROM message_mentions WHERE id = ? AND mentioned_user_id = ?
+    `).get(mentionId, userId);
+    
+    if (!mention) {
+      return res.status(404).json({ error: 'Mention not found', code: 'MENTION_NOT_FOUND' });
+    }
+    
+    db.prepare('UPDATE message_mentions SET is_read = 1 WHERE id = ?').run(mentionId);
+    
+    res.json({ success: true, isRead: true });
+  } catch (error) {
+    console.error('Mark mention as read error:', error);
+    res.status(500).json({ error: 'Failed to mark mention as read' });
+  }
+});
+
+// 全部标记为已读
+app.put('/api/mentions/read-all', authMiddleware, (req, res) => {
+  const db = getDatabase();
+  const { userId } = (req as any).user;
+  
+  try {
+    const result = db.prepare(`
+      UPDATE message_mentions SET is_read = 1 WHERE mentioned_user_id = ? AND is_read = 0
+    `).run(userId);
+    
+    res.json({ success: true, updatedCount: result.changes });
+  } catch (error) {
+    console.error('Mark all mentions as read error:', error);
+    res.status(500).json({ error: 'Failed to mark all mentions as read' });
+  }
+});
+
+// ============ 消息相关 API ============
 
 // 获取私聊消息历史
 app.get('/api/messages/private/:otherUserId', authMiddleware, (req, res) => {

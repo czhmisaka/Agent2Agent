@@ -122,11 +122,20 @@ function handleGroupMessage(client, topic, message) {
     const db = (0, sqlite_1.getDatabase)();
     const parts = topic.split('/');
     const action = parts[3];
-    const groupId = parts[2];
+    const groupIdentifier = parts[2]; // 可能是名称或 ID
     if (action === 'message') {
-        const { userId, token, content } = message.payload;
+        const { userId: payloadUserId, token, content } = message.payload;
         try {
             const decoded = jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
+            const userId = decoded.userId;
+            // 先根据名称或 ID 查找群组 ID
+            let groupId = groupIdentifier;
+            const group = db.prepare('SELECT id FROM groups WHERE (id = ? OR name = ?) AND is_active = 1').get(groupIdentifier, groupIdentifier);
+            if (!group) {
+                console.log(`❌ Group not found: ${groupIdentifier}`);
+                return;
+            }
+            groupId = group.id;
             const membership = db.prepare('SELECT * FROM group_members WHERE group_id = ? AND user_id = ?').get(groupId, userId);
             if (!membership) {
                 console.log(`❌ User ${userId} not in group ${groupId}`);
@@ -144,7 +153,7 @@ function handleGroupMessage(client, topic, message) {
                     messageId,
                     content,
                     contentType: 'text',
-                    sender: { userId, username: user.username, nickname: user.nickname }
+                    sender: { userId, username: user?.username || 'Unknown', nickname: user?.nickname || null }
                 },
                 meta: { groupId }
             }, client.id);
@@ -160,18 +169,19 @@ function handleGroupMessage(client, topic, message) {
         const { userId, token } = message.payload;
         try {
             jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
-            const group = db.prepare('SELECT * FROM groups WHERE id = ? AND is_active = 1').get(groupId);
+            // 支持名称或 ID 查询
+            const group = db.prepare('SELECT id FROM groups WHERE (id = ? OR name = ?) AND is_active = 1').get(groupIdentifier, groupIdentifier);
             if (!group)
                 return;
             const memberId = (0, uuid_1.v4)();
             db.prepare(`INSERT OR REPLACE INTO group_members (id, group_id, user_id, role) VALUES (?, ?, ?, 'member')`)
-                .run(memberId, groupId, userId);
-            console.log(`✅ User ${userId} joined group ${groupId}`);
-            sendBroadcast(`chat/group/${groupId}/message`, {
+                .run(memberId, group.id, userId);
+            console.log(`✅ User ${userId} joined group ${group.id}`);
+            sendBroadcast(`chat/group/${group.id}/message`, {
                 type: 'system',
                 timestamp: new Date().toISOString(),
                 payload: { content: 'A new member joined the group', userId },
-                meta: { groupId }
+                meta: { groupId: group.id }
             }, client.id);
         }
         catch (error) {
@@ -182,14 +192,18 @@ function handleGroupMessage(client, topic, message) {
         const { userId, token } = message.payload;
         try {
             jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
+            // 支持名称或 ID 查询
+            const group = db.prepare('SELECT id FROM groups WHERE (id = ? OR name = ?) AND is_active = 1').get(groupIdentifier, groupIdentifier);
+            if (!group)
+                return;
             db.prepare('DELETE FROM group_members WHERE group_id = ? AND user_id = ?')
-                .run(groupId, userId);
-            console.log(`👋 User ${userId} left group ${groupId}`);
-            sendBroadcast(`chat/group/${groupId}/message`, {
+                .run(group.id, userId);
+            console.log(`👋 User ${userId} left group ${group.id}`);
+            sendBroadcast(`chat/group/${group.id}/message`, {
                 type: 'system',
                 timestamp: new Date().toISOString(),
                 payload: { content: 'A member left the group', userId },
-                meta: { groupId }
+                meta: { groupId: group.id }
             }, client.id);
         }
         catch (error) {
@@ -219,7 +233,7 @@ function handlePrivateMessage(client, topic, message) {
                 messageId,
                 content,
                 contentType: 'text',
-                sender: { userId: senderId, username: sender.username, nickname: sender.nickname }
+                sender: { userId: senderId, username: sender?.username || 'unknown', nickname: sender?.nickname }
             },
             meta: { receiverId }
         });
@@ -258,7 +272,9 @@ function handlePeerMessage(client, topic, rawPayload) {
             const msg = JSON.parse(rawPayload.toString());
             console.log(`💬 ${msg.payload?.sourceUsername || 'Unknown'} is typing...`);
         }
-        catch (e) { }
+        catch (e) {
+            console.error('Failed to parse typing message:', e);
+        }
     }
 }
 function sendResponse(client, topic, message) {

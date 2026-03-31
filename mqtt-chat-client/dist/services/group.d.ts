@@ -16,6 +16,7 @@ export declare class GroupService {
     listMembers(groupId: string): Promise<void>;
     isGroupJoined(groupId: string): boolean;
     getJoinedGroups(): string[];
+    getSubscriptions(): Promise<void>;
     private getTokenFromStorage;
     private getUserIdFromStorage;
 }

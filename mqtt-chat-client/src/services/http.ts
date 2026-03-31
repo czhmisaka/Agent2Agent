@@ -224,16 +224,65 @@ export class HttpService {
   }
 
   // 提及相关 API
-  async getMentions(limit: number = 50) {
+  async getMentions(options?: { limit?: number; offset?: number; isRead?: boolean }) {
     try {
-      const response = await this.client.get('/api/mentions', {
-        params: { limit }
-      });
+      const params: any = {};
+      if (options?.limit) params.limit = options.limit;
+      if (options?.offset) params.offset = options.offset;
+      if (options?.isRead !== undefined) params.is_read = options.isRead;
+      
+      const response = await this.client.get('/api/mentions', { params });
       return response.data;
     } catch (error: any) {
       console.error(chalk.red('❌ Failed to get mentions:'), error.message);
     }
-    return [];
+    return { mentions: [], total: 0, unreadCount: 0 };
+  }
+
+  // 删除单条提及
+  async deleteMention(mentionId: string): Promise<boolean> {
+    try {
+      await this.client.delete(`/api/mentions/${mentionId}`);
+      return true;
+    } catch (error: any) {
+      console.error(chalk.red('❌ Failed to delete mention:'), error.message);
+      return false;
+    }
+  }
+
+  // 批量删除提及
+  async deleteMentions(filter: 'read' | 'all' = 'read'): Promise<number> {
+    try {
+      const response = await this.client.delete('/api/mentions', {
+        params: { filter }
+      });
+      return response.data.deletedCount || 0;
+    } catch (error: any) {
+      console.error(chalk.red('❌ Failed to delete mentions:'), error.message);
+      return 0;
+    }
+  }
+
+  // 标记单条提及为已读
+  async markMentionAsRead(mentionId: string): Promise<boolean> {
+    try {
+      await this.client.put(`/api/mentions/${mentionId}/read`);
+      return true;
+    } catch (error: any) {
+      console.error(chalk.red('❌ Failed to mark mention as read:'), error.message);
+      return false;
+    }
+  }
+
+  // 全部标记为已读
+  async markAllMentionsAsRead(): Promise<number> {
+    try {
+      const response = await this.client.put('/api/mentions/read-all');
+      return response.data.updatedCount || 0;
+    } catch (error: any) {
+      console.error(chalk.red('❌ Failed to mark all mentions as read:'), error.message);
+      return 0;
+    }
   }
 
   // 统计相关 API

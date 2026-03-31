@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple Login</title>
+    <style>
+        body { font-family: Arial; padding: 50px; }
+        .form-group { margin-bottom: 15px; }
+        input { padding: 8px; width: 300px; margin: 5px 0; }
+        button { padding: 10px 20px; background: #FF4500; color: white; border: none; cursor: pointer; }
+        button:hover { background: #e03e00; }
+        #result { margin-top: 20px; padding: 15px; border: 1px solid #ccc; display: none; }
+        .success { background: #d4edda; border-color: #28a745; }
+        .error { background: #f8d7da; border-color: #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>Admin Login (Simple)</h1>
+    <div class="form-group">
+        <input type="text" id="username" placeholder="Username" value="admin">
+    </div>
+    <div class="form-group">
+        <input type="password" id="password" placeholder="Password" value="Admin@123">
+    </div>
+    <div class="form-group">
+        <button onclick="performLogin()">Login</button>
+    </div>
+    <div id="result"></div>
+    
+    <script>
+        function performLogin() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const resultDiv = document.getElementById('result');
+            
+            resultDiv.style.display = 'block';
+            resultDiv.className = '';
+            resultDiv.textContent = 'Logging in...';
+            
+            fetch('http://localhost:14050/api/users/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                credentials: 'include',
+                body: JSON.stringify({ username, password })
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                
+                const setCookieHeader = response.headers.get('Set-Cookie');
+                console.log('Set-Cookie header:', setCookieHeader);
+                
+                return response.json();
+            })
+            .then(data => {
+                console.log('Response data:', data);
+                
+                if (data.success) {
+                    resultDiv.className = 'success';
+                    resultDiv.innerHTML = `
+                        <h3>✅ Login Successful!</h3>
+                        <p>Welcome, ${data.username}!</p>
+                        <p>Token has been set in cookie.</p>
+                        <p><a href="/admin/">Go to Admin Dashboard →</a></p>
+                    `;
+                    
+                    // 3秒后自动跳转到 admin 页面
+                    setTimeout(() => {
+                        window.location.href = '/admin/';
+                    }, 2000);
+                } else {
+                    resultDiv.className = 'error';
+                    resultDiv.innerHTML = `
+                        <h3>❌ Login Failed</h3>
+                        <p>Error: ${data.error}</p>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                resultDiv.className = 'error';
+                resultDiv.innerHTML = `
+                    <h3>❌ Network Error</h3>
+                    <p>${error.message}</p>
+                `;
+            });
+        }
+        
+        // 页面加载时自动登录
+        window.onload = function() {
+            performLogin();
+        };
+    </script>
+</body>
+</html>

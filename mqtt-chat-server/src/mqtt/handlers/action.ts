@@ -9,23 +9,37 @@ import { v4 as uuidv4 } from 'uuid';
 import jwt from 'jsonwebtoken';
 import { config } from '../../config';
 import { getAedes } from '../broker';
+import { ActionPayload, ActionType, JwtPayload } from '../../types';
 
-interface ActionPayload {
-  type: string;
-  action: string;
-  timestamp: string;
-  payload: {
-    messageId?: string;
-    token?: string;
-    emoji?: string;
-    userId?: string;
-    target?: string;
-    value?: string;
-  };
-  meta?: {
-    groupId?: string;
-    correlationId?: string;
-  };
+// 定义数据库查询返回的消息类型
+interface DbMessage {
+  id: string;
+  group_id?: string;
+  sender_id: string;
+  content: string;
+  is_highlighted: number;
+  is_pinned: number;
+  is_recalled: number;
+}
+
+// 定义消息标志类型
+interface DbMessageFlag {
+  id: string;
+  message_id: string;
+  flag_type: string;
+  user_id: string;
+}
+
+// 定义反应类型
+interface DbMessageReaction {
+  emoji: string;
+  user_id: string;
+  username: string;
+}
+
+// 定义计数结果类型
+interface CountResult {
+  count: number;
 }
 
 export function handleMessageAction(client: Client, topic: string, payload: Buffer): void {
@@ -44,9 +58,9 @@ export function handleMessageAction(client: Client, topic: string, payload: Buff
       return;
     }
 
-    let decoded: any;
+    let decoded: JwtPayload;
     try {
-      decoded = jwt.verify(actionPayload.token, config.jwt.secret);
+      decoded = jwt.verify(actionPayload.token, config.jwt.secret) as JwtPayload;
     } catch (err) {
       sendActionResponse(client, topic, {
         success: false,
@@ -329,7 +343,7 @@ function handleReaction(
       
       // 获取新的反应数量
       const countResult = db.prepare('SELECT COUNT(*) as count FROM message_reactions WHERE message_id = ? AND emoji = ?')
-        .get(messageId, emoji) as any;
+        .get(messageId, emoji) as CountResult | undefined;
 
       // 广播更新
       broadcastReactionsUpdate(groupId, messageId);
@@ -357,7 +371,7 @@ function handleReaction(
 
       // 获取新的反应数量
       const countResult = db.prepare('SELECT COUNT(*) as count FROM message_reactions WHERE message_id = ? AND emoji = ?')
-        .get(messageId, emoji) as any;
+        .get(messageId, emoji) as CountResult | undefined;
 
       // 更新表情使用统计
       db.prepare('UPDATE custom_emojis SET usage_count = usage_count + 1 WHERE emoji = ?').run(emoji);

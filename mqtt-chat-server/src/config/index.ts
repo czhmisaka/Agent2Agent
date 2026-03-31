@@ -85,11 +85,11 @@ const getCorsAllowedOrigins = (): string[] => {
 
 export const config = {
   mqtt: {
-    port: parseInt(process.env.MQTT_PORT || '1883'),
-    websocketPort: parseInt(process.env.MQTT_WS_PORT || '8883')
+    port: parseInt(process.env.MQTT_PORT || '14080'),
+    websocketPort: parseInt(process.env.MQTT_WS_PORT || '14083')
   },
   http: {
-    port: parseInt(process.env.HTTP_PORT || '3000')
+    port: parseInt(process.env.HTTP_PORT || '14070')
   },
   database: {
     path: process.env.DB_PATH || './data/chat.db'

@@ -27,12 +27,18 @@ export class MessageService {
 
   async sendMessage(groupId: string, content: string, userId: string): Promise<boolean> {
     try {
-      // 通过 MQTT 发送消息（认证已在连接时完成，不再传递 token）
+      if (!this.token) {
+        console.error(chalk.red('❌ Not authenticated. Please login first.'));
+        return false;
+      }
+      
+      // 通过 MQTT 发送消息（传递 token 用于服务器验证）
       await this.mqttClient.publish(`chat/group/${groupId}/message`, {
         type: 'message',
         timestamp: new Date().toISOString(),
         payload: {
           userId: userId,
+          token: this.token,  // 添加 token
           content
         },
         meta: {
@@ -128,7 +134,8 @@ export class MessageService {
 
   async getMentions(limit: number = 50): Promise<void> {
     try {
-      const mentions = await this.httpService.getMentions(limit);
+      const result = await this.httpService.getMentions({ limit });
+      const mentions = result?.mentions || [];
 
       if (!mentions || mentions.length === 0) {
         console.log(chalk.yellow('\n💬 You have no mentions yet.'));
@@ -136,22 +143,44 @@ export class MessageService {
         return;
       }
 
-      console.log(chalk.yellow(`\n💬 Your Mentions (${mentions.length}):`));
+      console.log(chalk.yellow(`\n💬 Your Mentions (${result.total || mentions.length}):`));
+      if (result.unreadCount > 0) {
+        console.log(chalk.yellow(`  📬 Unread: ${result.unreadCount}`));
+      }
       console.log(chalk.gray('─'.repeat(60)));
 
-      mentions.forEach((mention: any) => {
+      mentions.forEach((mention: any, index: number) => {
         const time = new Date(mention.createdAt || mention.timestamp).toLocaleString();
         const sender = mention.senderUsername || mention.sender?.username || 'Unknown';
         const groupName = mention.groupName || mention.groupId || '';
-        console.log(`${chalk.gray(time)} ${chalk.yellow(`in ${groupName}`)}`);
-        console.log(`  ${chalk.cyan(sender)}: "${mention.content || mention.preview || ''}"`);
+        const unreadMark = mention.isRead ? '' : ' 🔵';
+        
+        console.log(`\n${index + 1}. ${chalk.gray(time)} ${chalk.yellow(`in ${groupName}`)}${unreadMark}`);
+        console.log(`   ${chalk.cyan(sender)}: "${mention.content || mention.preview || ''}"`);
+        console.log(`   ${chalk.gray(`[ID: ${mention.id}]`)}`);
       });
 
       console.log(chalk.gray('─'.repeat(60)));
-      console.log();
+      console.log(chalk.gray('\n  Commands: /mention read <id> | /mention delete <id> | /mention clear\n'));
     } catch (error) {
       console.error(chalk.red('❌ Failed to get mentions:'), error);
     }
+  }
+
+  async deleteMention(mentionId: string): Promise<boolean> {
+    return await this.httpService.deleteMention(mentionId);
+  }
+
+  async markMentionAsRead(mentionId: string): Promise<boolean> {
+    return await this.httpService.markMentionAsRead(mentionId);
+  }
+
+  async clearMentions(filter: 'read' | 'all' = 'read'): Promise<number> {
+    return await this.httpService.deleteMentions(filter);
+  }
+
+  async markAllMentionsAsRead(): Promise<number> {
+    return await this.httpService.markAllMentionsAsRead();
   }
 
   async getStats(userId?: string): Promise<void> {
