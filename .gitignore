@@ -31,3 +31,19 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Playwright test files
+.playwright-cli/
+playwright-report/
+test-results/
+playwright-screenshots/
+*.playwright.*.png
+*.playwright.*.log
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Local data
+data/
