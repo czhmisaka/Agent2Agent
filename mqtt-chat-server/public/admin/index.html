@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MQTT Chat Admin Dashboard</title>
-    <!-- Gridstack.js for draggable/resizable grid -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@10.0.1/dist/gridstack.min.css"/>
-    <script src="https://cdn.jsdelivr.net/npm/gridstack@10.0.1/dist/gridstack-all.min.js"></script>
+    <!-- Gridstack.js for draggable/resizable grid (本地版本) -->
+    <link rel="stylesheet" href="/lib/gridstack.min.css"/>
+    <script src="/lib/gridstack-all.min.js"></script>
     <style>
         :root {
             --line-primary: #000000;
@@ -41,12 +41,14 @@
             display: flex;
             flex-direction: column;
             box-sizing: border-box;
+            overflow: hidden;
         }
         
         header {
             border-bottom: 1px solid var(--line-tertiary);
             padding-bottom: 8px;
             margin-bottom: 12px;
+            flex-shrink: 0;
         }
         
         h1 {
@@ -388,27 +390,180 @@
             display: none !important;
         }
 
-        /* Gridstack custom styles */
-        .grid-stack {
-            background: transparent;
+        /* Flexbox 布局 - 等高三栏 */
+        .dashboard-grid {
+            display: flex !important;
+            gap: 12px !important;
+            height: calc(100vh - 150px) !important;
+            min-height: 0 !important;
         }
         
-        .grid-stack-item-content {
-            background: transparent;
-            border: none;
-            border-radius: 0;
+        .dashboard-grid > .card {
+            flex: 1 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            min-height: 0 !important;
         }
         
-        .grid-stack > .grid-stack-item > .grid-stack-item-content {
-            overflow: hidden;
+        .dashboard-grid > .card > .card-body {
+            flex: 1 !important;
+            overflow-y: auto !important;
+            min-height: 0 !important;
+            padding: 8px !important;
         }
         
-        .grid-stack-item.ui-resizable-resizing .card-body {
-            overflow: hidden;
+        /* 列表卡片样式 */
+        .card-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
         
-        .grid-stack-item.ui-draggable-dragging .card-body {
-            opacity: 0.7;
+        .item-card {
+            border: 1px solid var(--line-light);
+            border-radius: 4px;
+            padding: 10px;
+            background: #fafafa;
+            transition: all 0.15s ease;
+        }
+        
+        .item-card:hover {
+            border-color: var(--line-accent);
+            background: #fff;
+        }
+        
+        .item-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        
+        .item-card-body {
+            font-size: 12px;
+            color: var(--line-secondary);
+        }
+        
+        .item-card-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 6px;
+            font-size: 11px;
+            color: var(--line-secondary);
+        }
+        
+        /* 用户卡片特定样式 */
+        .user-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .user-card-info {
+            flex: 1;
+        }
+        
+        .user-card-name {
+            font-weight: 600;
+            font-size: 13px;
+        }
+        
+        .user-card-id {
+            font-size: 10px;
+            color: var(--line-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .user-card-stats {
+            text-align: right;
+        }
+        
+        .user-card-status {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+        }
+        
+        /* 用户卡片交互样式 */
+        .user-card-interactive {
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .user-card-interactive:hover {
+            border-color: var(--line-accent) !important;
+            background: #fff !important;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(255, 69, 0, 0.15);
+        }
+        
+        .user-card-action {
+            color: var(--line-accent);
+            font-size: 11px;
+            font-weight: 500;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        .user-card-interactive:hover .user-card-action {
+            opacity: 1;
+        }
+        
+        /* 消息卡片特定样式 */
+        .message-card {
+            border-left: 3px solid var(--line-tertiary);
+        }
+        
+        .message-card.group {
+            border-left-color: #3B82F6;
+        }
+        
+        .message-card.private {
+            border-left-color: #8B5CF6;
+        }
+        
+        .message-card.system {
+            border-left-color: #EC4899;
+        }
+        
+        .message-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        
+        .message-card-sender {
+            font-weight: 600;
+            font-size: 12px;
+        }
+        
+        .message-card-time {
+            font-size: 10px;
+            color: var(--line-secondary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .message-card-content {
+            font-size: 12px;
+            color: var(--line-primary);
+            word-break: break-word;
+        }
+        
+        .message-card-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 4px;
+            font-size: 10px;
+            color: var(--line-secondary);
+        }
+        
+        /* 隐藏旧的 GridStack 容器 */
+        #dashboardGrid {
+            display: none !important;
         }
         
         /* Resize handle */
@@ -461,18 +616,30 @@
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
                     <h1>📡 MQTT Chat Admin Dashboard</h1>
-                    <div class="status-bar">
+                    <div class="status-bar" id="systemStatus">
                         <div class="status-item">
                             <span class="status-dot online"></span>
                             <span>Server Online</span>
                         </div>
                         <div class="status-item">
-                            <span>Port: </span>
-                            <span id="httpPort">14070</span>
+                            <span>HTTP: </span>
+                            <span id="httpPort">-</span>
                         </div>
                         <div class="status-item">
                             <span>MQTT: </span>
-                            <span>1883</span>
+                            <span id="mqttPort">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span>在线: </span>
+                            <span id="mqttClients">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span>内存: </span>
+                            <span id="memoryUsage">-</span>
+                        </div>
+                        <div class="status-item">
+                            <span>运行: </span>
+                            <span id="uptime">-</span>
                         </div>
                     </div>
                 </div>
@@ -502,49 +669,48 @@
             </div>
         </div>
         
-        <div class="grid-stack" id="dashboardGrid">
-            <div class="grid-stack-item" gs-x="0" gs-y="0" gs-w="4" gs-h="6">
-                <div class="grid-stack-item-content">
-                    <div class="card">
-                        <div class="card-header" style="cursor: move;">
-                            <span class="card-title">📋 Topics</span>
-                            <button class="btn btn-sm" onclick="loadTopics()">Refresh</button>
-                        </div>
-                        <div class="card-body" id="topicsList">
-                            <div class="loading">Loading...</div>
-                        </div>
+        <!-- 使用 CSS Grid 替代 GridStack 实现等高布局 -->
+        <div class="dashboard-grid">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">📋 Topics</span>
+                    <button class="btn btn-sm" onclick="loadTopics()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="search-box" style="margin-bottom:8px;">
+                        <input type="text" class="search-input" id="topicSearch" placeholder="Search topics..." oninput="filterTopics()">
+                    </div>
+                    <div id="topicsList">
+                        <div class="loading">Loading...</div>
                     </div>
                 </div>
             </div>
             
-            <div class="grid-stack-item" gs-x="4" gs-y="0" gs-w="4" gs-h="6">
-                <div class="grid-stack-item-content">
-                    <div class="card">
-                        <div class="card-header" style="cursor: move;">
-                            <span class="card-title">👥 Users</span>
-                            <button class="btn btn-sm" onclick="loadUsers()">Refresh</button>
-                        </div>
-                        <div class="card-body" id="usersList">
-                            <div class="loading">Loading...</div>
-                        </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">👥 Users</span>
+                    <button class="btn btn-sm" onclick="loadUsers()">Refresh</button>
+                </div>
+                <div class="card-body">
+                    <div class="search-box" style="margin-bottom:8px;">
+                        <input type="text" class="search-input" id="userSearch" placeholder="Search users..." oninput="filterUsers()">
+                    </div>
+                    <div id="usersList">
+                        <div class="loading">Loading...</div>
                     </div>
                 </div>
             </div>
             
-            <div class="grid-stack-item" gs-x="8" gs-y="0" gs-w="4" gs-h="6">
-                <div class="grid-stack-item-content">
-                    <div class="card">
-                        <div class="card-header" style="cursor: move;">
-                            <span class="card-title">💬 Messages</span>
-                            <button class="btn btn-sm" onclick="loadMessages()">Refresh</button>
-                        </div>
-                        <div class="card-body" style="padding:4px;">
-                            <div class="search-box" style="margin-bottom:4px;">
-                                <input type="text" class="search-input" id="messageSearch" placeholder="Search..." oninput="filterMessages()">
-                            </div>
-                            <div id="messagesList" style="font-size:11px;">Loading...</div>
-                        </div>
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">💬 Messages</span>
+                    <button class="btn btn-sm" onclick="loadMessages()">Refresh</button>
+                </div>
+                <div class="card-body" style="padding:4px;">
+                    <div class="search-box" style="margin-bottom:4px;">
+                        <input type="text" class="search-input" id="messageSearch" placeholder="Search messages..." oninput="filterMessages()">
                     </div>
+                    <div id="messagesList" style="font-size:11px;">Loading...</div>
                 </div>
             </div>
         </div>
@@ -680,11 +846,14 @@
             document.getElementById('totalTopics').textContent = topics.size;
         }
         
+        // 存储所有 topics 数据用于搜索
+        let allTopics = [];
+        
         async function loadTopics() {
             const container = document.getElementById('topicsList');
             container.innerHTML = '<div class="loading">Loading...</div>';
             
-            const topics = [
+            allTopics = [
                 { name: 'chat/auth/login', type: 'system', description: 'User login events' },
                 { name: 'chat/auth/register', type: 'system', description: 'User registration events' },
                 { name: 'chat/group/{groupId}/message', type: 'group', description: 'Group messages' },
@@ -692,34 +861,62 @@
                 { name: 'chat/system/notification', type: 'system', description: 'System notifications' }
             ];
             
-            if (topics.length === 0) {
+            if (allTopics.length === 0) {
                 container.innerHTML = '<div class="empty-state">No active topics</div>';
                 return;
             }
             
+            renderTopics(allTopics);
+        }
+        
+        function renderTopics(topics) {
+            const container = document.getElementById('topicsList');
+            
+            if (topics.length === 0) {
+                container.innerHTML = '<div class="empty-state">No topics found</div>';
+                return;
+            }
+            
             let html = `
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Topic</th>
-                            <th>Type</th>
-                            <th>Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${topics.map(topic => `
-                            <tr>
-                                <td><span class="topic-name">${topic.name}</span></td>
-                                <td><span class="badge badge-${topic.type}">${topic.type}</span></td>
-                                <td>${topic.description}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                <div class="card-list">
+                    ${topics.map(topic => `
+                        <div class="item-card">
+                            <div class="item-card-header">
+                                <span class="topic-name">${topic.name}</span>
+                                <span class="badge badge-${topic.type}">${topic.type}</span>
+                            </div>
+                            <div class="item-card-body">
+                                ${topic.description}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:#999;text-align:center">显示 ${topics.length} / ${allTopics.length} 个主题</div>
             `;
             
             container.innerHTML = html;
         }
+        
+        function filterTopics() {
+            const searchTerm = document.getElementById('topicSearch').value.toLowerCase();
+            
+            if (!searchTerm) {
+                renderTopics(allTopics);
+                return;
+            }
+            
+            const filtered = allTopics.filter(topic => 
+                topic.name.toLowerCase().includes(searchTerm) ||
+                topic.type.toLowerCase().includes(searchTerm) ||
+                topic.description.toLowerCase().includes(searchTerm)
+            );
+            
+            renderTopics(filtered);
+        }
+        
+        // 存储所有 users 数据用于搜索
+        let allUsers = [];
+        let userMessageCounts = {};
         
         async function loadUsers() {
             const container = document.getElementById('usersList');
@@ -734,45 +931,142 @@
             
             // Get message counts for each user
             const allMessagesData = await fetchAPI('/api/admin/messages');
-            const messageCounts = {};
+            userMessageCounts = {};
             if (Array.isArray(allMessagesData)) {
                 allMessagesData.forEach(msg => {
                     const senderId = msg.sender_id || msg.user_id;
                     if (senderId) {
-                        messageCounts[senderId] = (messageCounts[senderId] || 0) + 1;
+                        userMessageCounts[senderId] = (userMessageCounts[senderId] || 0) + 1;
                     }
                 });
             }
             
+            // 存储用户数据用于搜索
+            allUsers = users;
+            
+            renderUsers(allUsers);
+        }
+        
+        function renderUsers(users) {
+            const container = document.getElementById('usersList');
+            
+            if (users.length === 0) {
+                container.innerHTML = '<div class="empty-state">No users found</div>';
+                return;
+            }
+            
             let html = `
-                <table>
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Status</th>
-                            <th>Messages</th>
-                            <th>Last Login</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${users.map(user => {
-                            const msgCount = messageCounts[user.user_id] || 0;
-                            return `
-                            <tr>
-                                <td><strong>${user.username}</strong><br><span class="time">#${user.user_id || '-'}</span></td>
-                                <td>
-                                    <span class="status-dot ${user.is_online ? 'online' : 'offline'}"></span>
-                                    ${user.is_online ? 'Online' : 'Offline'}
-                                </td>
-                                <td><span class="stat-value-small">${msgCount}</span></td>
-                                <td class="time">${user.last_login ? formatTime(user.last_login) : 'Never'}</td>
-                            </tr>
-                        `}).join('')}
-                    </tbody>
-                </table>
+                <div class="card-list">
+                    ${users.map(user => {
+                        // 修复：API 返回的用户 ID 字段是 'id' 而不是 'user_id'
+                        const msgCount = userMessageCounts[user.id] || userMessageCounts[user.user_id] || 0;
+                        return `
+                        <div class="item-card user-card-interactive" onclick="selectUser('${escapeHtml(user.username)}')" title="点击查看 ${user.username} 的消息">
+                            <div class="user-card">
+                                <div class="user-card-info">
+                                    <div class="user-card-name">${user.username}</div>
+                                    <div class="user-card-id">#${user.id || '-'}</div>
+                                </div>
+                                <div class="user-card-stats">
+                                    <div class="user-card-status">
+                                        <span class="status-dot ${user.is_online ? 'online' : 'offline'}"></span>
+                                        ${user.is_online ? 'Online' : 'Offline'}
+                                    </div>
+                                    <div style="margin-top:4px;">
+                                        <span class="stat-value-small">${msgCount}</span> 条消息
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="item-card-meta">
+                                <span>最后登录: ${user.last_login ? formatTime(user.last_login) : '从未'}</span>
+                                <span class="user-card-action">💬 查看消息 →</span>
+                            </div>
+                        </div>
+                    `}).join('')}
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:#999;text-align:center">显示 ${users.length} / ${allUsers.length} 个用户</div>
+                <div style="margin-top:8px;font-size:10px;color:#666;text-align:center">💡 点击用户卡片可筛选查看其消息</div>
             `;
             
             container.innerHTML = html;
+        }
+        
+        // 选中用户并过滤消息
+        function selectUser(username) {
+            // 将用户名填入消息搜索框
+            const messageSearchInput = document.getElementById('messageSearch');
+            messageSearchInput.value = username;
+            
+            // 触发搜索
+            filterMessages();
+            
+            // 滚动到消息列表
+            document.getElementById('messagesList').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            
+            // 显示提示
+            showNotification(`已筛选 ${username} 的消息`);
+        }
+        
+        // 显示通知提示
+        function showNotification(message) {
+            // 移除已存在的通知
+            const existing = document.querySelector('.notification-toast');
+            if (existing) existing.remove();
+            
+            const notification = document.createElement('div');
+            notification.className = 'notification-toast';
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: var(--line-accent);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 4px;
+                font-size: 13px;
+                z-index: 9999;
+                animation: slideIn 0.3s ease;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            `;
+            
+            // 添加动画样式
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes slideIn {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOut {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+            
+            document.body.appendChild(notification);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+        
+        function filterUsers() {
+            const searchTerm = document.getElementById('userSearch').value.toLowerCase();
+            
+            if (!searchTerm) {
+                renderUsers(allUsers);
+                return;
+            }
+            
+            const filtered = allUsers.filter(user => 
+                user.username.toLowerCase().includes(searchTerm) ||
+                String(user.id).includes(searchTerm)
+            );
+            
+            renderUsers(filtered);
         }
         
         function formatTime(timestamp) {
@@ -852,34 +1146,27 @@
             }
             
             let html = `
-                <table>
-                    <thead>
-                        <tr>
-                            <th style="width:120px">Time</th>
-                            <th style="width:60px">Type</th>
-                            <th style="width:80px">Group/User</th>
-                            <th style="width:100px">Sender</th>
-                            <th>Content</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${messages.slice(0, 100).map(msg => {
-                            const date = new Date(msg.created_at);
-                            const timeStr = date.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-                            const dateStr = date.toLocaleDateString('zh-CN', {month:'2-digit', day:'2-digit'});
-                            const target = msg.groupName || (msg.receiver_id ? '私聊' : '-');
-                            return `
-                            <tr>
-                                <td class="time"><span style="color:#999">${dateStr}</span> ${timeStr}</td>
-                                <td><span class="badge badge-${msg.messageType}">${msg.messageType === 'group' ? '群' : '私'}</span></td>
-                                <td class="time" style="max-width:80px;overflow:hidden;text-overflow:ellipsis">${target}</td>
-                                <td>${msg.username || msg.nickname || 'Unknown'}</td>
-                                <td class="message-content">${escapeHtml(msg.content || '')}</td>
-                            </tr>
-                        `}).join('')}
-                    </tbody>
-                </table>
-                <div style="margin-top:8px;font-size:11px;color:#999">显示 ${Math.min(100, messages.length)} / ${messages.length} 条消息</div>
+                <div class="card-list">
+                    ${messages.slice(0, 100).map(msg => {
+                        const date = new Date(msg.created_at);
+                        const timeStr = date.toLocaleTimeString('zh-CN', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+                        const dateStr = date.toLocaleDateString('zh-CN', {month:'2-digit', day:'2-digit'});
+                        const target = msg.groupName || (msg.receiver_id ? '私聊' : '-');
+                        return `
+                        <div class="item-card message-card ${msg.messageType}">
+                            <div class="message-card-header">
+                                <span class="message-card-sender">${msg.username || msg.nickname || 'Unknown'}</span>
+                                <span class="badge badge-${msg.messageType}">${msg.messageType === 'group' ? '群' : '私'}</span>
+                            </div>
+                            <div class="message-card-content">${escapeHtml(msg.content || '')}</div>
+                            <div class="message-card-footer">
+                                <span>${target}</span>
+                                <span class="time"><span style="color:#999">${dateStr}</span> ${timeStr}</span>
+                            </div>
+                        </div>
+                    `}).join('')}
+                </div>
+                <div style="margin-top:8px;font-size:11px;color:#999;text-align:center">显示 ${Math.min(100, messages.length)} / ${messages.length} 条消息</div>
             `;
             
             container.innerHTML = html;
@@ -908,49 +1195,117 @@
             return div.innerHTML;
         }
         
-        // GridStack initialization
-        let grid = null;
-        
-        function initGridStack() {
-            grid = GridStack.init({
-                column: 12,
-                cellHeight: 60,
-                margin: 6,
-                float: true,
-                animate: true,
-                draggable: {
-                    handle: '.card-header'
-                },
-                resizable: {
-                    handles: 'se'
-                }
-            }, '#dashboardGrid');
+        // 动态设置网格高度以填满视窗
+        function setDashboardHeight() {
+            const container = document.getElementById('mainContent');
+            const dashboardGrid = container.querySelector('.dashboard-grid');
+            const header = container.querySelector('header');
+            const stats = container.querySelector('.stats');
             
-            // Save layout on change
-            grid.on('change', function(event, items) {
-                saveLayout();
-            });
+            if (!dashboardGrid || !header || !stats) return;
             
-            // Load saved layout
-            loadLayout();
+            const containerHeight = container.clientHeight;
+            const headerHeight = header.offsetHeight;
+            const statsHeight = stats.offsetHeight;
+            const gap = 12; // .stats 的 margin-bottom
+            
+            const gridHeight = containerHeight - headerHeight - statsHeight - gap;
+            
+            dashboardGrid.style.height = `${gridHeight}px`;
         }
         
-        function saveLayout() {
-            if (grid) {
-                const layout = grid.save();
-                localStorage.setItem('dashboardLayout', JSON.stringify(layout));
+        // 从后端获取真实的系统状态
+        async function loadSystemStatus() {
+            try {
+                // /health 端点不需要认证
+                const response = await fetch(`${API_BASE}/health`);
+                
+                if (!response.ok) {
+                    console.warn('Failed to fetch system status:', response.status);
+                    return;
+                }
+                
+                const health = await response.json();
+                
+                // 更新系统状态显示
+                // HTTP 端口从当前连接获取
+                document.getElementById('httpPort').textContent = window.location.port || '-';
+                // MQTT 端口从 health API 获取
+                document.getElementById('mqttPort').textContent = health.services?.mqtt?.port || '-';
+                // MQTT 连接数
+                document.getElementById('mqttClients').textContent = health.services?.mqtt?.connected_clients || 0;
+                
+                // 格式化内存使用
+                if (health.memory) {
+                    const used = health.memory.used || 0;
+                    const total = health.memory.total || 0;
+                    document.getElementById('memoryUsage').textContent = `${used}/${total}MB`;
+                }
+                
+                // 格式化运行时间
+                if (health.uptime) {
+                    const uptime = health.uptime;
+                    const days = Math.floor(uptime / 86400);
+                    const hours = Math.floor((uptime % 86400) / 3600);
+                    const minutes = Math.floor((uptime % 3600) / 60);
+                    
+                    if (days > 0) {
+                        document.getElementById('uptime').textContent = `${days}d${hours}h`;
+                    } else if (hours > 0) {
+                        document.getElementById('uptime').textContent = `${hours}h${minutes}m`;
+                    } else {
+                        document.getElementById('uptime').textContent = `${minutes}m`;
+                    }
+                }
+                
+                // 更新服务状态指示器
+                const statusDot = document.querySelector('#systemStatus .status-dot');
+                if (health.status === 'ok') {
+                    statusDot.className = 'status-dot online';
+                    statusDot.parentElement.querySelector('span:last-child').textContent = 'Server Online';
+                } else {
+                    statusDot.className = 'status-dot offline';
+                    statusDot.parentElement.querySelector('span:last-child').textContent = 'Server Degraded';
+                }
+                
+            } catch (error) {
+                console.error('Failed to load system status:', error);
+                // 显示错误状态
+                document.getElementById('mqttClients').textContent = 'Error';
+                document.getElementById('memoryUsage').textContent = 'Error';
+                document.getElementById('uptime').textContent = 'Error';
             }
         }
         
-        function loadLayout() {
-            const saved = localStorage.getItem('dashboardLayout');
-            if (saved && grid) {
-                try {
-                    const layout = JSON.parse(saved);
-                    grid.load(layout);
-                } catch (e) {
-                    console.log('Could not load saved layout');
+        // 跟踪消息处理统计
+        let messageStats = {
+            lastCount: 0,
+            lastTimestamp: Date.now(),
+            messagesPerMinute: 0
+        };
+        
+        async function updateMessageStats() {
+            try {
+                const messages = await fetchAPI('/api/admin/messages');
+                if (Array.isArray(messages)) {
+                    const currentCount = messages.length;
+                    const currentTime = Date.now();
+                    
+                    // 计算时间差（分钟）
+                    const timeDiffMinutes = (currentTime - messageStats.lastTimestamp) / 60000;
+                    
+                    // 如果超过1分钟，重新计算速率
+                    if (timeDiffMinutes >= 1) {
+                        const countDiff = currentCount - messageStats.lastCount;
+                        messageStats.messagesPerMinute = Math.max(0, Math.round(countDiff / timeDiffMinutes));
+                        messageStats.lastCount = currentCount;
+                        messageStats.lastTimestamp = currentTime;
+                    }
+                    
+                    console.log(`📊 Message stats: ${currentCount} total, ~${messageStats.messagesPerMinute} msg/min`);
                 }
+            } catch (error) {
+                console.error('Failed to update message stats:', error);
             }
         }
         
@@ -958,8 +1313,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             console.log('Admin Dashboard loaded');
             
-            // Initialize gridstack after a short delay to ensure DOM is ready
-            setTimeout(initGridStack, 100);
+            // 设置初始高度
+            setDashboardHeight();
             
             // Debug: 打印 token 状态
             const token = getToken();
@@ -994,8 +1349,24 @@
                     loadStats();
                     loadTopics();
                     loadUsers();
+                    loadMessages();
+                    loadSystemStatus(); // 添加系统状态刷新
+                    updateMessageStats(); // 更新消息统计
                 }
             }, 30000);
+            
+            // 初始化系统状态（不需要认证）
+            loadSystemStatus();
+            
+            // 初始化消息统计
+            setTimeout(() => {
+                updateMessageStats();
+            }, 1000);
+        });
+        
+        // 监听窗口大小变化
+        window.addEventListener('resize', () => {
+            setDashboardHeight();
         });
     </script>
 </body>
